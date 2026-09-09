@@ -1,0 +1,16 @@
+{
+  "documentType": "Car Insurance",
+  "provider": "ABC Insurance",
+  "policyNumber": "AI-482019",
+  "expiryDate": "12 October 2026",
+  "premium": "₹18,400",
+  "previewTitle": "CAR INSURANCE POLICY",
+  "previewLines": [
+    "Provider: ABC Insurance",
+    "Policy No: AI-482019",
+    "Vehicle: KA 01 AB 1234",
+    "Start Date: 13 Oct 2025",
+    "Expiry Date: 12 Oct 2026",
+    "Premium: ₹18,400"
+  ]
+}

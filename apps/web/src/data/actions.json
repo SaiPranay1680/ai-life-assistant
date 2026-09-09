@@ -1,0 +1,32 @@
+[
+  {
+    "id": "act-pay-bill",
+    "title": "Pay electricity bill",
+    "dueLabel": "18 Sep",
+    "dueDate": "18 September",
+    "priority": "high",
+    "reason": "Amount ₹4,850 is due on 18 September 2026.",
+    "reminderDefault": "Remind me 3 days before",
+    "status": "suggested"
+  },
+  {
+    "id": "act-renew",
+    "title": "Renew car insurance",
+    "dueLabel": "12 Oct",
+    "dueDate": "12 October",
+    "priority": "medium",
+    "reason": "Your current policy expires on 12 October 2026.",
+    "reminderDefault": "Remind me 30 days before",
+    "status": "suggested"
+  },
+  {
+    "id": "act-warranty",
+    "title": "Review laptop warranty",
+    "dueLabel": "01 Dec",
+    "dueDate": "01 December",
+    "priority": "low",
+    "reason": "Warranty remains active; review coverage before it lapses.",
+    "reminderDefault": "Remind me 14 days before",
+    "status": "suggested"
+  }
+]

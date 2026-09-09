@@ -1,0 +1,9 @@
+# See https://nextjs.org/docs/app/api-reference/config/next-config-js
+
+/node_modules
+/.next
+/out
+.env*
+!.env.example
+next-env.d.ts
+*.tsbuildinfo

@@ -1,0 +1,30 @@
+[
+  {
+    "id": "doc-bescom",
+    "name": "BESCOM August Bill",
+    "type": "Bill",
+    "importantDate": "18 Sep 2026",
+    "status": "Action created"
+  },
+  {
+    "id": "doc-insurance",
+    "name": "Car Insurance Policy",
+    "type": "Insurance",
+    "importantDate": "12 Oct 2026",
+    "status": "Reminder set"
+  },
+  {
+    "id": "doc-laptop",
+    "name": "Laptop Invoice",
+    "type": "Purchase",
+    "importantDate": "02 Jan 2027",
+    "status": "Warranty active"
+  },
+  {
+    "id": "doc-passport",
+    "name": "Passport",
+    "type": "Important document",
+    "importantDate": "16 Mar 2031",
+    "status": "No action"
+  }
+]

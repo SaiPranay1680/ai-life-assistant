@@ -1,0 +1,33 @@
+{
+  "user": {
+    "id": "user-anita",
+    "name": "Anita Rao",
+    "email": "anita@example.com"
+  },
+  "attention": [
+    {
+      "id": "att-bill",
+      "title": "Electricity bill",
+      "badge": "Due soon",
+      "badgeTone": "danger",
+      "headline": "₹4,850 due on 18 September",
+      "meta": "BESCOM • August 2026"
+    },
+    {
+      "id": "att-insurance",
+      "title": "Car insurance",
+      "badge": "Renew",
+      "badgeTone": "warning",
+      "headline": "Policy expires on 12 October",
+      "meta": "ABC Insurance • Vehicle policy"
+    },
+    {
+      "id": "att-warranty",
+      "title": "Laptop warranty",
+      "badge": "Active",
+      "badgeTone": "success",
+      "headline": "Warranty active for 84 more days",
+      "meta": "Purchased 02 January 2026"
+    }
+  ]
+}
