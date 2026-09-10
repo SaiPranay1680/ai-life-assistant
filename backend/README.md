@@ -1,33 +1,4 @@
-# AI Life Assistant
-
-Personal Action Intelligence Platform.
-
-**Core flow:** Upload → Understand → Extract → Action → Confirm → Remind → Ask
-
-## Documentation (start here)
-
-Full KT, architecture, setup, and decisions: **[docs/README.md](./docs/README.md)**
-
-## Backend setup and PostgreSQL connection
-
-The backend API and database setup are documented here:
-
-- [backend/README.md](./backend/README.md)
-
-## Run the frontend
-
-```bash
-cd apps/web
-cp .env.example .env.local
-npm install
-npm run dev
-```
-
-Open http://localhost:3000 — any valid email and a password of 6+ characters. Data is mocked until FastAPI exists.
-
-
-
-# Run the Backend
+# AI Life Assistant Backend
 
 This backend provides the FastAPI API layer for the AI Life Assistant project. It is designed to support:
 
