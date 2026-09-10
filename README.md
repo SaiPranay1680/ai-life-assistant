@@ -375,16 +375,7 @@ Before production, ensure the following:
 
 ---
 
-## 12. Git workflow for team collaboration
 
-When pushing to Git, keep the application secrets local.
-
-```bash
-git status
-git add .
-git commit -m "Add backend DB schema and initial auth scaffolding"
-git push origin main
-```
 
 Important:
 
@@ -394,7 +385,7 @@ Important:
 
 ---
 
-## 13. Quick developer checklist
+## 12. Quick developer checklist
 
 Use this checklist before starting work:
 
@@ -409,7 +400,7 @@ Use this checklist before starting work:
 
 ---
 
-## 14. Common issues and fixes
+## 13. Common issues and fixes
 
 ### Password authentication failed for user `ai_app`
 
@@ -448,7 +439,7 @@ pip install -r requirements.txt
 
 ---
 
-## 15. Summary
+## 14. Summary
 
 This backend is ready to connect to PostgreSQL, run migrations, and serve the API. The database schema is already created and the project is structured for JWT and OIDC implementation by the next developer.
 
