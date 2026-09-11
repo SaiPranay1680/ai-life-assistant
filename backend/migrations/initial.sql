@@ -128,6 +128,8 @@ CREATE TABLE IF NOT EXISTS timelines (
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
 
+
+
 -- Trigger helper
 CREATE OR REPLACE FUNCTION trigger_set_updated_at()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
@@ -136,6 +138,9 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+DROP TRIGGER IF EXISTS users_updated_at ON users;
+DROP TRIGGER IF EXISTS oauth_accounts_updated_at ON oauth_accounts;
 
 CREATE TRIGGER users_updated_at BEFORE UPDATE ON users
 FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
