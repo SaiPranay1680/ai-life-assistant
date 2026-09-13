@@ -1,23 +1,30 @@
-import os
 import asyncio
+import os
+from pathlib import Path
+
 import asyncpg
+from dotenv import load_dotenv
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+load_dotenv(BACKEND_DIR / ".env")
+
 
 async def run():
     dsn = os.getenv("DATABASE_URL") or "postgresql+asyncpg://ai_app:1627@localhost:5432/ai_life_assistant"
-    # asyncpg expects a postgresql:// URI without +asyncpg
     dsn = dsn.replace("+asyncpg", "")
-    sql_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "migrations", "initial.sql")
+    migrations_dir = BACKEND_DIR / "migrations"
+    files = sorted(migrations_dir.glob("*.sql"))
     print("Using DSN:", dsn)
-    print("Reading SQL from:", sql_path)
-    with open(sql_path, "r", encoding="utf-8") as f:
-        sql = f.read()
     conn = await asyncpg.connect(dsn)
     try:
-        # asyncpg can execute multiple commands in a single execute
-        await conn.execute(sql)
+        for sql_path in files:
+            print("Applying", sql_path.name)
+            sql = sql_path.read_text(encoding="utf-8")
+            await conn.execute(sql)
         print("Migration applied successfully")
     finally:
         await conn.close()
+
 
 if __name__ == "__main__":
     asyncio.run(run())

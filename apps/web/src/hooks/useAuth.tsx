@@ -9,13 +9,19 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { getStoredUser, login as loginRequest, logout as logoutRequest } from "@/services/api/auth.service";
+import {
+  getStoredUser,
+  login as loginRequest,
+  logout as logoutRequest,
+  register as registerRequest,
+} from "@/services/api/auth.service";
 import type { User } from "@/types";
 
 type AuthContextValue = {
   user: User | null;
   ready: boolean;
   login: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string) => Promise<void>;
   logout: () => void;
 };
 
@@ -39,14 +45,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(nextUser);
   }, []);
 
+  const register = useCallback(async (email: string, password: string) => {
+    const nextUser = await registerRequest(email, password);
+    setUser(nextUser);
+  }, []);
+
   const logout = useCallback(() => {
     logoutRequest();
     setUser(null);
   }, []);
 
   const value = useMemo(
-    () => ({ user, ready, login, logout }),
-    [user, ready, login, logout],
+    () => ({ user, ready, login, register, logout }),
+    [user, ready, login, register, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

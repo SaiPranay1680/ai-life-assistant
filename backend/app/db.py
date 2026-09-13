@@ -1,12 +1,12 @@
-import os
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import declarative_base
 
-DATABASE_URL = os.getenv("DATABASE_URL") or "postgresql+asyncpg://ai_app:1627@localhost:5432/ai_life_assistant"
+from .core.config import settings
 
-engine = create_async_engine(DATABASE_URL, future=True, echo=False)
-AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+engine = create_async_engine(settings.database_url, future=True, echo=False)
+AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 Base = declarative_base()
+
 
 async def get_db():
     async with AsyncSessionLocal() as session:
