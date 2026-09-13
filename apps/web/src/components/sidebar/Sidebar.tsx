@@ -11,7 +11,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/utils";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -45,7 +45,8 @@ export function Sidebar({
   onClose: () => void;
 }) {
   const pathname = usePathname();
-  const { user } = useAuth();
+  const router = useRouter();
+  const { user, logout } = useAuth();
 
   return (
     <>
@@ -99,6 +100,19 @@ export function Sidebar({
         <div className="border-t border-white/10 px-6 py-5">
           <p className="text-sm font-medium">{user?.name ?? "Guest"}</p>
           <p className="truncate text-xs text-slate-400">{user?.email}</p>
+          {user ? (
+            <button
+              type="button"
+              className="mt-3 text-xs text-slate-400 hover:text-white hover:underline"
+              onClick={() => {
+                logout();
+                onClose();
+                router.replace("/login");
+              }}
+            >
+              Sign out
+            </button>
+          ) : null}
         </div>
       </aside>
     </>
