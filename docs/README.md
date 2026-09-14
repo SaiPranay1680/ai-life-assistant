@@ -26,7 +26,7 @@ This folder is the **single source of truth** for the project. A new developer s
 | Roadmap | [future-enhancements.md](./future-enhancements.md) |
 | KT In / KT Out for the team | [kt-notes.md](./kt-notes.md) |
 | Phase 1 decisions (complete) | [phase-1-decisions.md](./phase-1-decisions.md) |
-| Do later — do not forget (OIDC, S3, full Docker) | [deferred-work.md](./deferred-work.md) |
+| Do later — do not forget (OIDC, S3, Docker, OCR, ClamAV) | [deferred-work.md](./deferred-work.md) |
 
 ## Current reality vs target
 

@@ -33,6 +33,62 @@ See Phase 1 Step 5 in [phase-1-decisions.md](./phase-1-decisions.md).
 
 ---
 
+## DOC-001 — Documents list and upload (Phase 3)
+
+| Field | Value |
+| --- | --- |
+| Status | In progress |
+| Do now (Phase 3) | `GET /documents`, `POST /documents`, local `backend/uploads/`, wire UI off `documents.json` |
+| Allowed files | `.pdf` `.jpg` `.jpeg` `.png` — max 20 MB |
+| Checks now | JWT + workspace, size, extension, magic bytes, SHA-256 duplicate in workspace |
+| Storage | `workspaces/{workspace_id}/documents/{document_id}/original{ext}` |
+| Do later | OCR, classify, extract, actions (see DOC-002) |
+
+### Phase 3 done when
+
+- [x] Register / login / `GET /me`
+- [x] `POST /documents` saves a file on disk and a Postgres row
+- [x] `GET /documents` lists that workspace only
+- [ ] Confirm in the UI after Sign out / Sign in
+- [ ] Same file again returns duplicate
+
+---
+
+## DOC-002 — Parse / OCR / extract (Phase 4)
+
+| Field | Value |
+| --- | --- |
+| Status | Not started |
+| When | Phase 4, after DOC-001 works |
+| Libraries | PyMuPDF, PaddleOCR, Pillow / OpenCV |
+| Do not do in | Phase 3 upload |
+| Rules | Upload HTTP must not wait for OCR. Worker updates status. User confirms fields. Never log document text |
+
+---
+
+## DOC-003 — DOCX support
+
+| Field | Value |
+| --- | --- |
+| Status | Not started |
+| When | After PDF / JPG / PNG upload + extract works |
+| Library | python-docx |
+| Do not do in | Phase 3 |
+
+---
+
+## SEC-001 — ClamAV malware scan
+
+| Field | Value |
+| --- | --- |
+| Status | Not started |
+| Do now | `scan_status = pending` stub only |
+| Do later | ClamAV before OCR |
+| When | Phase 8–9 |
+| Rule | Unscanned files must not enter OCR |
+
+---
+
 ## STOR-001 — AWS S3 object storage
 
 | Field | Value |
