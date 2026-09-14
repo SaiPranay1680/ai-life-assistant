@@ -20,7 +20,9 @@ async def run():
         for sql_path in files:
             print("Applying", sql_path.name)
             sql = sql_path.read_text(encoding="utf-8")
-            await conn.execute(sql)
+            chunks = [sql] if "$$" in sql else [part.strip() for part in sql.split(";") if part.strip()]
+            for stmt in chunks:
+                await conn.execute(stmt)
         print("Migration applied successfully")
     finally:
         await conn.close()

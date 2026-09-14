@@ -1,7 +1,5 @@
 import axios from "axios";
 import type { DocumentType, DocumentStatus, ExtractedFields, VaultDocument } from "@/types";
-import extraction from "@/data/extraction.json";
-import { wait } from "@/utils";
 import { apiClient } from "./client";
 
 type ApiDocument = {
@@ -9,6 +7,7 @@ type ApiDocument = {
   original_filename: string;
   document_type: string | null;
   processing_status: string;
+  important_date?: string | null;
   created_at: string | null;
 };
 
@@ -30,7 +29,8 @@ function mapType(value: string | null): DocumentType {
 }
 
 function mapStatus(value: string): DocumentStatus {
-  if (value === "ready_for_review" || value === "needs_review") return "Needs review";
+  if (value === "ready_for_review" || value === "needs_review" || value === "ocr_required") return "Needs review";
+  if (value === "reviewed") return "Reviewed";
   if (value === "failed") return "Needs review";
   if (value === "uploaded" || value === "queued" || value === "processing") return "Processing";
   return "Processing";
@@ -41,7 +41,7 @@ function toVault(doc: ApiDocument): VaultDocument {
     id: doc.id,
     name: doc.original_filename,
     type: mapType(doc.document_type),
-    importantDate: "—",
+    importantDate: doc.important_date?.trim() ? doc.important_date : "—",
     status: mapStatus(doc.processing_status),
   };
 }
@@ -77,7 +77,58 @@ export async function uploadDocument(file: File): Promise<{ fileName: string; id
   }
 }
 
-export async function getExtraction(): Promise<ExtractedFields> {
-  await wait(200);
-  return extraction as ExtractedFields;
+export async function getDocument(id: string): Promise<ApiDocument> {
+  try {
+    const { data } = await apiClient.get<ApiDocument>(`/documents/${id}`, { timeout: 120000 });
+    return data;
+  } catch (error) {
+    throw apiError(error, "Unable to load document.");
+  }
+}
+
+export async function getExtraction(documentId: string): Promise<ExtractedFields> {
+  try {
+    const { data } = await apiClient.get<ExtractedFields>(`/documents/${documentId}/extraction`, {
+      timeout: 120000,
+    });
+    return data;
+  } catch (error) {
+    throw apiError(error, "Unable to load extraction.");
+  }
+}
+
+export async function updateExtraction(
+  documentId: string,
+  fields: Pick<ExtractedFields, "documentType" | "provider" | "policyNumber" | "startDate" | "expiryDate" | "premium">,
+): Promise<ExtractedFields> {
+  try {
+    const { data } = await apiClient.patch<ExtractedFields>(`/documents/${documentId}/extraction`, fields);
+    return data;
+  } catch (error) {
+    throw apiError(error, "Unable to save extraction.");
+  }
+}
+
+export async function viewDocumentFile(id: string, fileName: string): Promise<void> {
+  try {
+    const response = await apiClient.get(`/documents/${id}/file`, {
+      responseType: "blob",
+      timeout: 120000,
+    });
+    const mime = String(response.headers["content-type"] || response.data?.type || "application/octet-stream").split(";")[0];
+    const blob = new Blob([response.data], { type: mime });
+    const url = window.URL.createObjectURL(blob);
+    window.open(url, "_blank", "noopener,noreferrer");
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+  } catch (error) {
+    throw apiError(error, `Unable to open ${fileName}.`);
+  }
+}
+
+export async function deleteDocument(id: string): Promise<void> {
+  try {
+    await apiClient.delete(`/documents/${id}`);
+  } catch (error) {
+    throw apiError(error, "Unable to delete document.");
+  }
 }

@@ -10,5 +10,7 @@ passlib[bcrypt]
 bcrypt
 python-jose[cryptography]
 python-multipart
+pymupdf
+rapidocr-onnxruntime
 authlib
 psycopg2-binary

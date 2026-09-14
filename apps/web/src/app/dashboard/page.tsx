@@ -4,7 +4,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { AttentionCard } from "@/components/cards/AttentionCard";
 import { ActionRow } from "@/components/cards/ActionCard";
 import { Button } from "@/components/ui/Button";
-import { getActions, getAttentionCards } from "@/services/api/action.service";
+import { getActions, toAttentionCard } from "@/services/api/action.service";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import Link from "next/link";
@@ -12,14 +12,12 @@ import { useRouter } from "next/navigation";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const attentionQuery = useQuery({
-    queryKey: ["attention"],
-    queryFn: getAttentionCards,
-  });
   const actionsQuery = useQuery({
     queryKey: ["actions"],
     queryFn: getActions,
   });
+  const actions = actionsQuery.data ?? [];
+  const cards = actions.slice(0, 3).map(toAttentionCard);
 
   return (
     <AppShell
@@ -30,27 +28,32 @@ export default function DashboardPage() {
         </Button>
       }
     >
-      {attentionQuery.isLoading || actionsQuery.isLoading ? (
+      {actionsQuery.isLoading ? (
         <p className="text-sm text-slate-500">Loading dashboard…</p>
       ) : null}
-      {attentionQuery.isError ? (
-        <p className="text-sm text-rose-600">Could not load attention cards.</p>
+      {actionsQuery.isError ? (
+        <p className="text-sm text-rose-600">
+          {actionsQuery.error instanceof Error ? actionsQuery.error.message : "Could not load actions."}
+        </p>
       ) : null}
       <section className="grid gap-4 md:grid-cols-3">
-        {(attentionQuery.data ?? []).map((card) => (
+        {cards.map((card) => (
           <AttentionCard key={card.id} card={card} />
         ))}
       </section>
+      {!actionsQuery.isLoading && !actionsQuery.isError && cards.length === 0 ? (
+        <p className="text-sm text-slate-500">
+          Nothing needs attention yet. Upload a document, confirm the details, then suggested actions appear here.
+        </p>
+      ) : null}
       <section className="mt-6 grid gap-4 lg:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 lg:col-span-2">
           <h2 className="text-lg font-semibold text-slate-900">Upcoming actions</h2>
           <div className="mt-4 space-y-3">
-            {(actionsQuery.data ?? []).length === 0 ? (
+            {actions.length === 0 ? (
               <p className="text-sm text-slate-500">No upcoming actions.</p>
             ) : (
-              (actionsQuery.data ?? []).map((action) => (
-                <ActionRow key={action.id} action={action} />
-              ))
+              actions.map((action) => <ActionRow key={action.id} action={action} />)
             )}
           </div>
         </div>

@@ -51,7 +51,9 @@ User → Workspace → Document → ExtractionField / Action → Reminder, plus 
 
 **Phase 3–5 now:** files on disk at `backend/uploads/`. Postgres stores metadata only. FastAPI chooses the path. Validate size, type, hash in Python. Do not log document text.
 
-**Phase 8–9 later:** AWS S3. Tracked in [deferred-work.md](./deferred-work.md) as **STOR-001**. Malware scanner (ClamAV) is also later; stub/hook only until then.
+**Phase 4 now:** local malware scan before OCR. Files that fail the scan are not stored for processing.
+
+**Phase 8–9 later:** AWS S3. Tracked in [deferred-work.md](./deferred-work.md) as **STOR-001**. ClamAV daemon is **SEC-001**.
 
 ## Step 7 of 8 — AI and privacy
 
