@@ -130,7 +130,7 @@ Until `docs/adr/` exists, record decisions here.
 | ADR-006 | FastAPI modular monolith (not microservices) | Accepted (not coded) |
 | ADR-007 | PostgreSQL as system of record | Accepted (not coded) |
 | ADR-008 | Celery/Redis workers for document/AI jobs | Accepted (not coded) |
-| ADR-009 | OIDC managed identity in production | Accepted (not coded); UI mock login only |
+| ADR-009 | Phase 3: email + password + JWT. OIDC (Google/Auth0) in Phase 8–9 before production. See [deferred-work.md](./deferred-work.md) AUTH-001 | Accepted |
 | ADR-010 | Reset of the first generated FastAPI/Docker scaffold so the team learns and follows the playbook folder layout | Accepted |
 
 See [technology-stack.md](./technology-stack.md) for alternatives considered.

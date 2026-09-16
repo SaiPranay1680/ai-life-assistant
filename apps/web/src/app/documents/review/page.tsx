@@ -4,25 +4,41 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { getExtraction } from "@/services/api/document.service";
+import { getExtraction, updateExtraction } from "@/services/api/document.service";
 import type { ExtractedFields } from "@/types";
 import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 
-function ReviewForm({ data }: { data: ExtractedFields }) {
+function ReviewForm({ data, documentId }: { data: ExtractedFields; documentId: string }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
     documentType: data.documentType,
     provider: data.provider,
     policyNumber: data.policyNumber,
+    startDate: data.startDate ?? "",
     expiryDate: data.expiryDate,
     premium: data.premium,
   });
 
   function update(field: keyof typeof form, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function confirm() {
+    setError(null);
+    setSaving(true);
+    try {
+      await updateExtraction(documentId, form);
+      router.push("/actions");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to save extraction.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -62,6 +78,12 @@ function ReviewForm({ data }: { data: ExtractedFields }) {
             onChange={(event) => update("policyNumber", event.target.value)}
           />
           <Input
+            label="Start date"
+            value={form.startDate}
+            disabled={!editing}
+            onChange={(event) => update("startDate", event.target.value)}
+          />
+          <Input
             label="Expiry date"
             value={form.expiryDate}
             disabled={!editing}
@@ -78,22 +100,53 @@ function ReviewForm({ data }: { data: ExtractedFields }) {
           <Button variant="ghost" onClick={() => setEditing((value) => !value)}>
             {editing ? "Lock details" : "Edit details"}
           </Button>
-          <Button onClick={() => router.push("/actions")}>Confirm & continue</Button>
+          <Button onClick={() => void confirm()} disabled={saving}>
+            {saving ? "Saving…" : "Confirm & continue"}
+          </Button>
         </div>
+        {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
       </div>
     </div>
   );
 }
 
 export default function ReviewPage() {
-  const query = useQuery({ queryKey: ["extraction"], queryFn: getExtraction });
+  return (
+    <Suspense
+      fallback={
+        <p className="flex min-h-screen items-center justify-center text-sm text-slate-500">
+          Loading…
+        </p>
+      }
+    >
+      <ReviewContent />
+    </Suspense>
+  );
+}
+
+function ReviewContent() {
+  const params = useSearchParams();
+  const documentId = params.get("id") ?? "";
+  const query = useQuery({
+    queryKey: ["extraction", documentId],
+    queryFn: () => getExtraction(documentId),
+    enabled: Boolean(documentId),
+  });
 
   return (
     <AppShell>
+      {!documentId ? (
+        <p className="text-sm text-rose-600">Missing document id. Upload the file again.</p>
+      ) : null}
       {query.isLoading ? (
         <p className="text-sm text-slate-500">Loading extraction…</p>
       ) : null}
-      {query.data ? <ReviewForm data={query.data} /> : null}
+      {query.error ? (
+        <p className="text-sm text-rose-600">
+          {query.error instanceof Error ? query.error.message : "Unable to load extraction."}
+        </p>
+      ) : null}
+      {query.data ? <ReviewForm data={query.data} documentId={documentId} /> : null}
     </AppShell>
   );
 }

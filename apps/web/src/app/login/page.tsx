@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 export default function LoginPage() {
-  const { login, user, ready } = useAuth();
+  const { login, register, user, ready } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -30,8 +30,12 @@ export default function LoginPage() {
       </section>
       <section className="flex items-center justify-center bg-slate-50 px-6 py-16">
         <LoginForm
-          onSubmit={async (email, password) => {
-            await login(email, password);
+          onSubmit={async (email, password, mode) => {
+            if (mode === "register") {
+              await register(email, password);
+            } else {
+              await login(email, password);
+            }
             router.push("/dashboard");
           }}
         />
