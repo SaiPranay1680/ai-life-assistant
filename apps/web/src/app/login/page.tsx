@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 export default function LoginPage() {
-  const { login, register, user, ready } = useAuth();
+  const { login, register, resetPassword, user, ready } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -37,6 +37,9 @@ export default function LoginPage() {
               await login(email, password);
             }
             router.push("/dashboard");
+          }}
+          onResetPassword={async (email, newPassword, confirmPassword) => {
+            return resetPassword(email, newPassword, confirmPassword);
           }}
         />
       </section>

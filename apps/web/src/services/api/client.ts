@@ -14,3 +14,25 @@ apiClient.interceptors.request.use((config) => {
   }
   return config;
 });
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (typeof window !== "undefined" && axios.isAxiosError(error) && error.response?.status === 401) {
+      const url = String(error.config?.url ?? "");
+      const isAuthForm =
+        url.includes("/auth/login") ||
+        url.includes("/auth/register") ||
+        url.includes("/auth/reset-password");
+      if (!isAuthForm) {
+        window.localStorage.removeItem("ala-auth-user");
+        window.localStorage.removeItem("ala-token");
+        window.localStorage.removeItem("ala-workspace-id");
+        if (!window.location.pathname.startsWith("/login")) {
+          window.location.replace("/login");
+        }
+      }
+    }
+    return Promise.reject(error);
+  },
+);

@@ -10,10 +10,13 @@ import {
   type ReactNode,
 } from "react";
 import {
+  getSessionExpiresAtMs,
   getStoredUser,
+  isSessionExpired,
   login as loginRequest,
   logout as logoutRequest,
   register as registerRequest,
+  resetPassword as resetPasswordRequest,
 } from "@/services/api/auth.service";
 import type { User } from "@/types";
 
@@ -22,6 +25,7 @@ type AuthContextValue = {
   ready: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
+  resetPassword: (email: string, newPassword: string, confirmPassword: string) => Promise<string>;
   logout: () => void;
 };
 
@@ -31,6 +35,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
 
+  const logout = useCallback(() => {
+    logoutRequest();
+    setUser(null);
+  }, []);
+
   useEffect(() => {
     const stored = getStoredUser();
     const id = window.setTimeout(() => {
@@ -39,6 +48,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, 0);
     return () => window.clearTimeout(id);
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const expireAt = getSessionExpiresAtMs();
+    if (expireAt === null || isSessionExpired()) {
+      logout();
+      if (!window.location.pathname.startsWith("/login")) {
+        window.location.replace("/login");
+      }
+      return;
+    }
+
+    const delay = Math.max(expireAt - Date.now(), 0);
+    const timer = window.setTimeout(() => {
+      logout();
+      if (!window.location.pathname.startsWith("/login")) {
+        window.location.replace("/login");
+      }
+    }, delay);
+
+    return () => window.clearTimeout(timer);
+  }, [user, logout]);
 
   const login = useCallback(async (email: string, password: string) => {
     const nextUser = await loginRequest(email, password);
@@ -50,14 +82,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(nextUser);
   }, []);
 
-  const logout = useCallback(() => {
-    logoutRequest();
-    setUser(null);
-  }, []);
+  const resetPassword = useCallback(
+    async (email: string, newPassword: string, confirmPassword: string) => {
+      return resetPasswordRequest(email, newPassword, confirmPassword);
+    },
+    [],
+  );
 
   const value = useMemo(
-    () => ({ user, ready, login, register, logout }),
-    [user, ready, login, register, logout],
+    () => ({ user, ready, login, register, resetPassword, logout }),
+    [user, ready, login, register, resetPassword, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
