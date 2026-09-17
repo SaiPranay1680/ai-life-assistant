@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 24
     upload_dir: str = str(BACKEND_DIR / "uploads")
     max_upload_bytes: int = 20 * 1024 * 1024
+    redis_url: str = "redis://localhost:6379/0"
+    celery_broker_url: str = "redis://localhost:6379/0"
+    celery_result_backend: str = "redis://localhost:6379/1"
 
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env",

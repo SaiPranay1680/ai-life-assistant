@@ -16,7 +16,7 @@ const titles = [
 function completeCountFromStatus(status: string | null): number {
   if (status === "ready_for_review" || status === "ocr_required" || status === "failed") return titles.length;
   if (status === "processing") return 2;
-  if (status === "uploaded") return 1;
+  if (status === "uploaded" || status === "queued") return 1;
   return 1;
 }
 
