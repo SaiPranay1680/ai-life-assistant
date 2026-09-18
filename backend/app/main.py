@@ -7,6 +7,7 @@ from .modules.auth.router import router as auth_router
 from .modules.documents.router import router as documents_router
 from .modules.actions.router import router as actions_router
 from .modules.users.router import router as users_router
+from .modules.admin.router import router as admin_router
 
 app = FastAPI(title="AI Life Assistant - Backend")
 
@@ -22,6 +23,7 @@ app.include_router(auth_router)
 app.include_router(documents_router)
 app.include_router(actions_router)
 app.include_router(users_router)
+app.include_router(admin_router)
 
 
 @app.get("/health")

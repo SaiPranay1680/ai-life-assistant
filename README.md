@@ -1,102 +1,78 @@
 # AI Life Assistant
 
-Personal Action Intelligence Platform.
+AI Life Assistant is a personal action intelligence platform that helps users manage documents, extract important information, create actions, send reminders, and interact with an AI assistant.
 
-**Core flow:** Upload → Understand → Extract → Action → Confirm → Remind → Ask
+The project has:
+- a FastAPI backend
+- a PostgreSQL database
+- a Next.js frontend
+- RBAC with User and Admin roles
+- a seeded default admin account for fresh developer environments
 
-## Documentation (start here)
+---
 
-Full KT, architecture, setup, and decisions: **[docs/README.md](./docs/README.md)**
+## Project overview
 
-## Backend setup and PostgreSQL connection
+This repository contains the full application setup for local development:
 
-The backend API and database setup are documented here:
+- Frontend: `apps/web`
+- Backend: `backend`
+- Documentation: `docs`
+- Main project setup guides: root `README.md`
 
-- [backend/README.md](./backend/README.md)
+---
 
-## Run the frontend
+## Default developer/admin account
+
+The project includes a seeded admin account so that every new developer can log in using the same admin credentials on a fresh database.
+
+Default admin credentials:
+
+- Username: `Admin`
+- Email: `admin@gmail.com`
+- Password: `16271627`
+- Role: `admin`
+
+Important:
+- This is the application login user for the website/admin dashboard.
+- The PostgreSQL database user/password is separate and still uses `ai_app` / `1627` unless you intentionally change it.
+
+---
+
+## Prerequisites
+
+Before running the project, install the following:
+
+- Python 3.11+
+- Node.js 18+
+- npm
+- PostgreSQL 14+ or 15+
+- `psql` client (recommended)
+- Git
+- VS Code or any terminal of your choice
+
+---
+
+## 1. Clone the project and open the repository
 
 ```bash
-cd apps/web
-cp .env.example .env.local
-npm install
-npm run dev
-```
-
-Open http://localhost:3000 — any valid email and a password of 6+ characters. Data is mocked until FastAPI exists.
-
-
-
-# Run the Backend
-
-This backend provides the FastAPI API layer for the AI Life Assistant project. It is designed to support:
-
-- PostgreSQL persistence
-- OIDC-based authentication
-- JWT access tokens and refresh tokens
-- Role-based authorization for app features
-- Document and conversation-related data models
-
-This project is intended to be used by multiple developers collaborating on the authentication and application backend before the frontend is fully wired to OIDC/JWT.
-
----
-
-## 1. Project structure
-
-```text
-backend/
-  .env.example
-  requirements.txt
-  README.md
-  app/
-    __init__.py
-    db.py
-    main.py
-    models/
-      __init__.py
-      user.py
-      oauth.py
-      refresh_token.py
-      documents.py
-  migrations/
-    initial.sql
-  scripts/
-    check_db.py
-    run_migration.py
-  alembic.ini
-  alembic/
-    env.py
+git clone <your-repository-url>
+cd ai-life-assistant
 ```
 
 ---
 
-## 2. Prerequisites
+## 2. Install PostgreSQL and create the database
 
-Before running this project, make sure the following are installed:
+### Option A: Install PostgreSQL locally on Windows
 
-- Python 3.11 or above
-- PostgreSQL 14+ (or 15)
-- `psql` client (optional but recommended)
-- Git
-- A terminal such as PowerShell, CMD, Git Bash, or Bash
-
-For Windows users, PostgreSQL installation commonly adds `psql` to PATH. If not, use the PostgreSQL SQL Shell or pgAdmin.
-
----
-
-## 3. Install PostgreSQL
-
-### Option A: Install locally on Windows
-
-1. Download PostgreSQL from the official PostgreSQL installer.
-2. Install it with default settings.
-3. Note the PostgreSQL username/password created during install.
-4. Start the PostgreSQL service.
-5. Open `psql` or pgAdmin.
+1. Install PostgreSQL from the official installer.
+2. Start the PostgreSQL service.
+3. Open `psql` or pgAdmin.
 
 ### Option B: Use Docker
 
-If you do not want to install PostgreSQL locally, use Docker:
+If you prefer Docker instead of a local install:
 
 ```bash
 docker run --name ai-pg \
@@ -107,23 +83,17 @@ docker run --name ai-pg \
   -d postgres:15
 ```
 
-Then connect to PostgreSQL as the `postgres` user.
+Then connect as `postgres` in PostgreSQL.
 
----
+### Create the PostgreSQL app role and database
 
-## 4. Create PostgreSQL user and database
-
-The project expects a database named `ai_life_assistant` and a role named `ai_app`.
-
-### Connect as postgres
+Open a terminal and run:
 
 ```bash
 psql -U postgres -h localhost
 ```
 
-If prompted, use the PostgreSQL password you created during install.
-
-### Create the role and database
+Then run the SQL below:
 
 ```sql
 CREATE USER ai_app WITH LOGIN PASSWORD '1627';
@@ -131,13 +101,13 @@ CREATE DATABASE ai_life_assistant OWNER ai_app;
 GRANT ALL PRIVILEGES ON DATABASE ai_life_assistant TO ai_app;
 ```
 
-### If the role already exists, reset the password
+If the user already exists, update its password:
 
 ```sql
 ALTER USER ai_app WITH PASSWORD '1627';
 ```
 
-### Grant schema permissions
+Grant schema permissions:
 
 ```sql
 \c ai_life_assistant
@@ -148,7 +118,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO ai_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO ai_app;
 ```
 
-### Verify the setup
+Verify the setup:
 
 ```sql
 \du
@@ -156,17 +126,14 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO ai_app;
 ```
 
 You should see:
-
 - role: `ai_app`
 - database: `ai_life_assistant`
 
 ---
 
-## 5. Database connection configuration
+## 3. Configure backend environment variables
 
-Copy the sample environment file and update it with your local DB credentials.
-
-From the project root:
+Inside the backend folder, copy the sample env file if present:
 
 ```bash
 cd backend
@@ -179,104 +146,35 @@ On macOS/Linux:
 cp .env.example .env
 ```
 
-Then update `.env`:
+Then make sure the `.env` file contains values like this:
 
 ```env
 DATABASE_URL=postgresql+asyncpg://ai_app:1627@localhost:5432/ai_life_assistant
-OIDC_CLIENT_ID=REPLACE_CLIENT_ID
-OIDC_CLIENT_SECRET=REPLACE_CLIENT_SECRET
-OIDC_AUTHORIZATION_ENDPOINT=
-OIDC_TOKEN_ENDPOINT=
-OIDC_USERINFO_ENDPOINT=
-JWT_PRIVATE_KEY=""
-JWT_PUBLIC_KEY=""
-JWT_ALGORITHM=RS256
-ACCESS_TOKEN_EXPIRE_MINUTES=15
-REFRESH_TOKEN_EXPIRE_DAYS=30
+FRONTEND_URL=http://localhost:3000
+JWT_SECRET=dev-only-change-me
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
+REDIS_URL=redis://localhost:6379/0
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/1
 ```
 
-Important notes:
-
-- The username and password in `DATABASE_URL` must exactly match the PostgreSQL user you created.
-- The DB name must be `ai_life_assistant`.
-- If you change the password in PostgreSQL, update the `DATABASE_URL` too.
-- Do not commit `.env` to Git. Keep it local only.
+Notes:
+- `DATABASE_URL` should match the PostgreSQL user and database you created above.
+- Keep `.env` local to your machine and do not commit it to Git.
+- These values are for local development only.
 
 ---
 
-## 6. Apply the database schema
+## 4. Install Python dependencies
 
-The project includes the initial schema migration in:
-
-```text
-backend/migrations/initial.sql
-```
-
-### Method 1: Use the project migration runner
-
-From the project root:
-
-```bash
-python backend/scripts/run_migration.py
-```
-
-This script reads the SQL file and executes it against PostgreSQL.
-
-### Method 2: Run the SQL file directly with psql
-
-```bash
-psql -U ai_app -d ai_life_assistant -f backend/migrations/initial.sql
-```
-
-### Expected result
-
-The migration creates tables such as:
-
-- `users`
-- `user_profiles`
-- `organizations`
-- `user_organizations`
-- `roles`
-- `user_roles`
-- `oauth_accounts`
-- `refresh_tokens`
-- `audit_logs`
-- `documents`
-- `messages`
-- `timelines`
-
----
-
-## 7. Validate the database connection
-
-You can test the DB connectivity using the project script:
-
-```bash
-python backend/scripts/check_db.py
-```
-
-This script should successfully execute a simple SQL query.
-
-You can also verify the tables:
-
-```bash
-psql -U ai_app -d ai_life_assistant -c "\dt"
-```
-
----
-
-## 8. Install Python dependencies
-
-From the project root:
-
-```bash
-cd backend
-python -m venv .venv
-```
+Create a virtual environment for the backend and install dependencies:
 
 ### Windows PowerShell
 
 ```powershell
+cd backend
+python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
@@ -284,41 +182,97 @@ pip install -r requirements.txt
 ### macOS/Linux
 
 ```bash
+cd backend
+python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Installed packages include:
-
+This project uses packages such as:
 - FastAPI
-- Uvicorn
 - SQLAlchemy
 - asyncpg
-- Alembic
-- python-dotenv
+- Uvicorn
 - passlib
-- python-jose
-- authlib
-- psycopg2-binary
+- python-dotenv
+- Celery
+- Redis client dependencies
 
 ---
 
-## 9. Run the backend
+## 5. Apply the database schema and migrations
 
-Once dependencies are installed and the database is ready, start the API:
+The project includes the migration script and SQL files under the backend folder.
+
+### Method 1: Run the migration script
+
+From the repo root:
+
+```bash
+python backend/scripts/run_migration.py
+```
+
+### Method 2: Run the SQL file directly
+
+```bash
+psql -U ai_app -d ai_life_assistant -f backend/migrations/initial.sql
+```
+
+This creates the needed database tables for users, profiles, workspaces, documents, actions, reminders, and related records.
+
+You can validate the tables with:
+
+```bash
+psql -U ai_app -d ai_life_assistant -c "\dt"
+```
+
+---
+
+## 6. Seed the default admin account
+
+Once the database is ready, run the seed script to create or update the default admin user.
+
+From the project root:
+
+```bash
+cd backend
+# activate venv first if not already active
+python scripts/seed.py
+```
+
+### What the seed script does
+
+The seed file will:
+- check whether `admin@gmail.com` already exists
+- create the admin user if it is missing
+- update the admin user if it already exists
+- set username to `Admin`
+- set role to `admin`
+- set email to `admin@gmail.com`
+- set password to `16271627`
+- activate the account and verify the email
+- create the admin profile and workspace if needed
+
+This makes the admin account reusable across new clones or fresh databases.
+
+---
+
+## 7. Run the backend
+
+After the database is created and the seed is complete, start the API:
 
 ```bash
 cd backend
 uvicorn app.main:app --reload --port 8000
 ```
 
-Then open:
+Check health:
 
-```text
+```bash
 http://localhost:8000/health
 ```
 
-You should get a JSON response like:
+Expected response:
 
 ```json
 {"status": "ok"}
@@ -326,99 +280,122 @@ You should get a JSON response like:
 
 ---
 
-## 10. OIDC and JWT setup for developers
+## 8. Install frontend dependencies and start the app
 
-This project is intentionally structured for future OIDC/JWT work.
+Open a separate terminal and run:
 
-### Required environment variables
+```bash
+cd apps/web
+npm install
+npm run dev
+```
 
-For the app to do JWT/OIDC properly, each developer will need values like:
+Then open:
 
-- `OIDC_CLIENT_ID`
-- `OIDC_CLIENT_SECRET`
-- `OIDC_AUTHORIZATION_ENDPOINT`
-- `OIDC_TOKEN_ENDPOINT`
-- `OIDC_USERINFO_ENDPOINT`
-- `JWT_PRIVATE_KEY`
-- `JWT_PUBLIC_KEY`
-- `JWT_ALGORITHM`
-
-Example values depend on the identity provider (Google, Azure AD, Keycloak, Auth0, Okta, etc.).
-
-### Recommended identity flow
-
-Use a standard OIDC authorization code flow with PKCE when the frontend is involved.
-
-Typical backend responsibilities:
-
-- redirect user to IdP login
-- exchange code for tokens
-- fetch user info
-- create or update local user record
-- save `oauth_accounts` mapping
-- issue JWT access token and refresh token
-- validate access token on protected routes
+```text
+http://localhost:3000
+```
 
 ---
 
-## 11. Security guidance
+## 9. Log in with the default admin account
 
-Before production, ensure the following:
+Use these credentials on the login page:
 
-- use SSL/TLS in all environments
-- keep JWT signing keys in a secret manager
-- do not store raw refresh tokens in plain text
-- hash refresh tokens before saving
-- use HttpOnly secure cookies for refresh tokens if possible
-- validate audience, issuer, and expiry on every JWT
-- log authentication events to `audit_logs`
+- Username: `Admin`
+- Email: `admin@gmail.com`
+- Password: `16271627`
+
+The app should redirect logged-in admins to the admin dashboard.
 
 ---
 
+## 10. Role-based access control
 
+This project supports two main roles:
 
-Important:
+- `user`
+- `admin`
 
-- `.env` should not be committed
-- `.venv` should not be committed
-- local PostgreSQL credentials should stay private
-
----
-
-## 12. Quick developer checklist
-
-Use this checklist before starting work:
-
-- [ ] PostgreSQL installed and running
-- [ ] `ai_app` role exists
-- [ ] `ai_life_assistant` database exists
-- [ ] database credentials match `.env`
-- [ ] migration script successfully executed
-- [ ] Python dependencies installed
-- [ ] backend starts on port 8000
-- [ ] `/health` returns status OK
+Rules:
+- Normal users can use the standard dashboard flow.
+- Admin users can access the admin dashboard.
+- Admin users can see overall site stats, manage users, delete user accounts, and update user information.
 
 ---
 
-## 13. Common issues and fixes
+## 11. Full setup summary
 
-### Password authentication failed for user `ai_app`
+Use this order every time you set up a fresh environment:
 
-Cause: PostgreSQL password mismatch.
+```bash
+# 1. Create PostgreSQL role and database
+psql -U postgres -h localhost
+# then run SQL to create ai_app and ai_life_assistant
 
-Fix:
+# 2. Configure backend env
+cd backend
+copy .env.example .env
+# or cp .env.example .env
+
+# 3. Install Python dependencies
+python -m venv .venv
+# Windows PowerShell:
+.\.venv\Scripts\Activate.ps1
+# macOS/Linux:
+pip install -r requirements.txt
+
+# 4. Apply schema
+python scripts/run_migration.py
+
+# 5. Seed default admin account
+python scripts/seed.py
+
+# 6. Start backend
+uvicorn app.main:app --reload --port 8000
+
+# 7. Start frontend
+cd ../apps/web
+npm install
+npm run dev
+```
+
+---
+
+## 12. Common issues and fixes
+
+### PostgreSQL connection failed
+
+Check:
+- PostgreSQL is running
+- `DATABASE_URL` matches the local values
+- the `ai_app` role exists
+- the `ai_life_assistant` database exists
+
+Example fix:
 
 ```sql
 ALTER USER ai_app WITH PASSWORD '1627';
 ```
 
-Then verify `.env` matches exactly.
+### Admin login fails
+
+Check:
+- the admin user exists in the database
+- the password is exactly `16271627`
+- the database is migrated
+- you ran the seed script
+
+Run:
+
+```bash
+cd backend
+python scripts/seed.py
+```
 
 ### Permission denied for schema public
 
-Cause: the role lacks privileges.
-
-Fix:
+Run:
 
 ```sql
 \c ai_life_assistant
@@ -427,30 +404,33 @@ GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO ai_app;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO ai_app;
 ```
 
-### `uvicorn` command not found
+### `uvicorn` not found
 
-Cause: environment not activated or dependencies not installed.
-
-Fix:
+Activate the virtual environment and install dependencies again:
 
 ```bash
+cd backend
+source .venv/bin/activate  # or .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
 ---
 
-## 14. Summary
+## 13. Important notes
 
-This backend is ready to connect to PostgreSQL, run migrations, and serve the API. The database schema is already created and the project is structured for JWT and OIDC implementation by the next developer.
+- Do not commit `.env` files.
+- Do not commit virtual environment folders.
+- Keep local PostgreSQL credentials private.
+- The admin credentials in the app are separate from the database role credentials.
+- Use `python scripts/seed.py` whenever you want to restore the default seeded admin user.
 
-The most important connection values are:
+---
 
-```text
-DB User: ai_app
-DB Password: 1627
-DB Name: ai_life_assistant
-Host: localhost
-Port: 5432
-```
+## 14. Project documentation
 
-Once those values match the local PostgreSQL instance and `.env`, the backend can connect and the project is ready for secure auth development.
+Additional technical and design documentation is available in:
+
+- [docs/README.md](./docs/README.md)
+- [backend/README.md](./backend/README.md)
+
+This completes the local setup path for running the app, migrating the database, seeding the admin account, and starting both the backend and frontend for development.

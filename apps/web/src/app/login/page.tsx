@@ -10,7 +10,10 @@ export default function LoginPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (ready && user) router.replace("/dashboard");
+    if (ready && user) {
+      const isAdmin = (user.role ?? "user") === "admin";
+      router.replace(isAdmin ? "/admin" : "/dashboard");
+    }
   }, [ready, user, router]);
 
   return (
@@ -30,13 +33,15 @@ export default function LoginPage() {
       </section>
       <section className="flex items-center justify-center bg-slate-50 px-6 py-16">
         <LoginForm
-          onSubmit={async (email, password, mode) => {
+          onSubmit={async (email, password, mode, username) => {
+            let nextUser;
             if (mode === "register") {
-              await register(email, password);
+              nextUser = await register(email, password, username);
             } else {
-              await login(email, password);
+              nextUser = await login(email, password);
             }
-            router.push("/dashboard");
+            const isAdmin = (nextUser.role ?? "user") === "admin";
+            router.push(isAdmin ? "/admin" : "/dashboard");
           }}
           onResetPassword={async (email, newPassword, confirmPassword) => {
             return resetPassword(email, newPassword, confirmPassword);

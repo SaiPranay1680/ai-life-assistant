@@ -26,13 +26,18 @@ def _display_name(email: str, name: str | None) -> str:
 
 
 def _to_auth_response(user: User, workspace: Workspace, token: str) -> AuthResponse:
-    name = user.profile.display_name if user.profile and user.profile.display_name else str(user.email)
+    name = (
+        user.name
+        or (user.profile.display_name if user.profile and user.profile.display_name else None)
+        or str(user.email).split("@", 1)[0]
+    )
     return AuthResponse(
         access_token=token,
         user=UserOut(
             id=user.id,
             email=str(user.email),
             name=name,
+            role=user.role or "user",
             workspace=WorkspaceOut(id=workspace.id, name=workspace.name),
         ),
     )
@@ -48,9 +53,13 @@ async def _load_user_graph(db: AsyncSession, user_id) -> User | None:
 
 
 async def register(db: AsyncSession, payload: RegisterRequest) -> AuthResponse:
+    username = (payload.username or payload.name or "").strip()
+    display = _display_name(str(payload.email), username)
     user = User(
         email=str(payload.email).lower(),
         password_hash=hash_password(payload.password),
+        name=display,
+        role="user",
     )
     db.add(user)
     try:
@@ -59,7 +68,6 @@ async def register(db: AsyncSession, payload: RegisterRequest) -> AuthResponse:
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists.")
 
-    display = _display_name(str(user.email), payload.name)
     db.add(UserProfile(user_id=user.id, display_name=display))
     workspace = Workspace(name=f"{display}'s workspace", owner_user_id=user.id)
     db.add(workspace)
@@ -68,7 +76,7 @@ async def register(db: AsyncSession, payload: RegisterRequest) -> AuthResponse:
     user = await _load_user_graph(db, user.id)
     if user is None or user.workspace is None:
         raise HTTPException(status_code=500, detail="Failed to create workspace.")
-    token = create_access_token(user_id=user.id, workspace_id=user.workspace.id)
+    token = create_access_token(user_id=user.id, workspace_id=user.workspace.id, role=user.role or "user")
     return _to_auth_response(user, user.workspace, token)
 
 
@@ -88,7 +96,11 @@ async def login(db: AsyncSession, payload: LoginRequest) -> AuthResponse:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password.")
 
     if user.workspace is None:
-        display = user.profile.display_name if user.profile and user.profile.display_name else str(user.email)
+        display = (
+            user.name
+            or (user.profile.display_name if user.profile and user.profile.display_name else None)
+            or str(user.email)
+        )
         user.workspace = Workspace(name=f"{display}'s workspace", owner_user_id=user.id)
         db.add(user.workspace)
 
@@ -97,7 +109,7 @@ async def login(db: AsyncSession, payload: LoginRequest) -> AuthResponse:
     user = await _load_user_graph(db, user.id)
     if user is None or user.workspace is None:
         raise HTTPException(status_code=500, detail="Workspace is missing.")
-    token = create_access_token(user_id=user.id, workspace_id=user.workspace.id)
+    token = create_access_token(user_id=user.id, workspace_id=user.workspace.id, role=user.role or "user")
     return _to_auth_response(user, user.workspace, token)
 
 
@@ -107,11 +119,16 @@ async def get_me(db: AsyncSession, user_id) -> UserOut:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found.")
     if user.workspace is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Workspace not found.")
-    name = user.profile.display_name if user.profile and user.profile.display_name else str(user.email)
+    name = (
+        user.name
+        or (user.profile.display_name if user.profile and user.profile.display_name else None)
+        or str(user.email).split("@", 1)[0]
+    )
     return UserOut(
         id=user.id,
         email=str(user.email),
         name=name,
+        role=user.role or "user",
         workspace=WorkspaceOut(id=user.workspace.id, name=user.workspace.name),
     )
 

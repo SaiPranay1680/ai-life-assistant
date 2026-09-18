@@ -23,8 +23,8 @@ import type { User } from "@/types";
 type AuthContextValue = {
   user: User | null;
   ready: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
+  register: (email: string, password: string, name?: string) => Promise<User>;
   resetPassword: (email: string, newPassword: string, confirmPassword: string) => Promise<string>;
   logout: () => void;
 };
@@ -54,11 +54,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const expireAt = getSessionExpiresAtMs();
     if (expireAt === null || isSessionExpired()) {
-      logout();
-      if (!window.location.pathname.startsWith("/login")) {
-        window.location.replace("/login");
-      }
-      return;
+      const id = window.setTimeout(() => {
+        logout();
+        if (!window.location.pathname.startsWith("/login")) {
+          window.location.replace("/login");
+        }
+      }, 0);
+      return () => window.clearTimeout(id);
     }
 
     const delay = Math.max(expireAt - Date.now(), 0);
@@ -72,14 +74,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(timer);
   }, [user, logout]);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string): Promise<User> => {
     const nextUser = await loginRequest(email, password);
     setUser(nextUser);
+    return nextUser;
   }, []);
 
-  const register = useCallback(async (email: string, password: string) => {
-    const nextUser = await registerRequest(email, password);
+  const register = useCallback(async (email: string, password: string, name?: string): Promise<User> => {
+    const nextUser = await registerRequest(email, password, name);
     setUser(nextUser);
+    return nextUser;
   }, []);
 
   const resetPassword = useCallback(

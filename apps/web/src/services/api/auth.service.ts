@@ -39,6 +39,7 @@ function persistSession(response: AuthResponse): User {
     id: response.user.id,
     name: response.user.name,
     email: response.user.email,
+    role: response.user.role === "admin" ? "admin" : "user",
   };
   window.localStorage.setItem(AUTH_KEY, JSON.stringify(user));
   window.localStorage.setItem(TOKEN_KEY, response.access_token);
@@ -94,6 +95,7 @@ export async function register(email: string, password: string, name?: string): 
       email,
       password,
       name,
+      username: name,
     });
     return persistSession(data);
   } catch (error) {
@@ -133,7 +135,11 @@ export function getStoredUser(): User | null {
   const raw = window.localStorage.getItem(AUTH_KEY);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as User;
+    const parsed = JSON.parse(raw) as User;
+    return {
+      ...parsed,
+      role: parsed.role === "admin" ? "admin" : "user",
+    };
   } catch {
     return null;
   }

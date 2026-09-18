@@ -11,7 +11,12 @@ export function LoginForm({
   onSubmit,
   onResetPassword,
 }: {
-  onSubmit: (email: string, password: string, mode: "login" | "register") => Promise<void>;
+  onSubmit: (
+    email: string,
+    password: string,
+    mode: "login" | "register",
+    username?: string,
+  ) => Promise<void>;
   onResetPassword: (
     email: string,
     newPassword: string,
@@ -19,10 +24,12 @@ export function LoginForm({
   ) => Promise<string>;
 }) {
   const [mode, setMode] = useState<AuthMode>("login");
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [errors, setErrors] = useState<{
+    username?: string;
     email?: string;
     password?: string;
     confirmPassword?: string;
@@ -34,6 +41,15 @@ export function LoginForm({
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     const nextErrors: typeof errors = {};
+
+    if (mode === "register") {
+      if (!username.trim()) {
+        nextErrors.username = "Username is required.";
+      } else if (username.trim().length < 2) {
+        nextErrors.username = "Username must be at least 2 characters.";
+      }
+    }
+
     if (!isValidEmail(email)) nextErrors.email = "Enter a valid email address.";
 
     if (mode === "forgot") {
@@ -58,11 +74,12 @@ export function LoginForm({
       if (mode === "forgot") {
         const message = await onResetPassword(email, password, confirmPassword);
         setSuccess(message);
+        setUsername("");
         setPassword("");
         setConfirmPassword("");
         setMode("login");
       } else {
-        await onSubmit(email, password, mode);
+        await onSubmit(email, password, mode, mode === "register" ? username.trim() : undefined);
       }
     } catch (error) {
       setErrors({
@@ -98,6 +115,18 @@ export function LoginForm({
             : "Enter your email and choose a new password."}
       </p>
       <div className="mt-8 space-y-4">
+        {mode === "register" ? (
+          <Input
+            label="Username"
+            name="username"
+            type="text"
+            autoComplete="username"
+            placeholder="johndoe"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            error={errors.username}
+          />
+        ) : null}
         <Input
           label="Email address"
           name="email"
@@ -148,6 +177,7 @@ export function LoginForm({
           className="mt-3 w-full text-center text-sm text-slate-500 hover:text-blue-600 hover:underline"
           onClick={() => {
             setMode("forgot");
+            setUsername("");
             setPassword("");
             setConfirmPassword("");
             setErrors({});
@@ -166,6 +196,7 @@ export function LoginForm({
           } else {
             setMode(mode === "login" ? "register" : "login");
           }
+          setUsername("");
           setPassword("");
           setConfirmPassword("");
           setErrors({});

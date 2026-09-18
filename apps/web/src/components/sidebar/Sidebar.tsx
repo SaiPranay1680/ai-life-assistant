@@ -8,6 +8,7 @@ import {
   ListChecks,
   MessageSquare,
   Settings,
+  ShieldCheck,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -15,7 +16,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/utils";
 import { useAuth } from "@/hooks/useAuth";
 
-const items = [
+const baseItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/documents/upload", label: "Smart Inbox", icon: Inbox },
   { href: "/actions", label: "Actions", icon: ListChecks },
@@ -47,6 +48,9 @@ export function Sidebar({
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
+  const items = user?.role === "admin"
+    ? [{ href: "/admin", label: "Admin Dashboard", icon: ShieldCheck }, ...baseItems]
+    : baseItems;
 
   return (
     <>

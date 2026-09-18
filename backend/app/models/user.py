@@ -18,14 +18,28 @@ class User(Base):
     )
     email = Column(CITEXT(), unique=True, index=True, nullable=False)
     password_hash = Column(Text, nullable=True)
+    name = Column(Text, nullable=True)
+    role = Column(Text, nullable=False, default="user", server_default=sa.text("'user'"))
     is_active = Column(Boolean, nullable=False, server_default=sa.true())
     email_verified = Column(Boolean, nullable=False, server_default=sa.false())
     created_at = Column(TIMESTAMP(timezone=True), server_default=sa.text("now()"))
     updated_at = Column(TIMESTAMP(timezone=True), server_default=sa.text("now()"))
     last_login_at = Column(TIMESTAMP(timezone=True), nullable=True)
 
-    profile = relationship("UserProfile", back_populates="user", uselist=False)
-    workspace = relationship("Workspace", back_populates="owner", uselist=False)
+    profile = relationship(
+        "UserProfile",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+        single_parent=True,
+    )
+    workspace = relationship(
+        "Workspace",
+        back_populates="owner",
+        uselist=False,
+        cascade="all, delete-orphan",
+        single_parent=True,
+    )
 
 
 class UserProfile(Base):
@@ -39,7 +53,7 @@ class UserProfile(Base):
     locale = Column(Text)
     timezone = Column(Text)
 
-    user = relationship("User", back_populates="profile")
+    user = relationship("User", back_populates="profile", single_parent=True)
 
 
 class Workspace(Base):
@@ -60,4 +74,4 @@ class Workspace(Base):
     )
     created_at = Column(TIMESTAMP(timezone=True), server_default=sa.text("now()"))
 
-    owner = relationship("User", back_populates="workspace")
+    owner = relationship("User", back_populates="workspace", single_parent=True)

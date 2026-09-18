@@ -25,6 +25,7 @@ class UserListItem(BaseModel):
     id: UUID
     email: str
     name: str | None = None
+    role: str = "user"
     is_active: bool = True
     email_verified: bool = False
     created_at: datetime | None = None

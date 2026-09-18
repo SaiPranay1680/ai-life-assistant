@@ -12,6 +12,10 @@ const titles: Record<string, { title: string; subtitle?: string }> = {
     title: "Good morning, Anita",
     subtitle: "Here's what needs your attention today.",
   },
+  "/admin": {
+    title: "Admin Dashboard",
+    subtitle: "System-wide overview, users, and database activity.",
+  },
   "/documents/upload": {
     title: "Upload a document",
     subtitle:
@@ -79,10 +83,13 @@ export function AppShell({
     );
   }
 
+  const displayName = user.name?.trim() ? firstName(user.name.trim()) : "there";
   const title =
     pathname === "/dashboard"
-      ? `${greetingForNow()}, ${firstName(user.name)}`
-      : meta.title;
+      ? `${greetingForNow()}, ${displayName}`
+      : pathname === "/admin"
+        ? "Admin Dashboard"
+        : meta.title;
 
   return (
     <div className="flex min-h-screen bg-[#f4f7fb]">

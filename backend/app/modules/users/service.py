@@ -9,8 +9,8 @@ from .schemas import UserListItem, UserProfileOut, WorkspaceOut
 
 
 def _to_user_item(user: User) -> UserListItem:
-    name = None
-    if user.profile:
+    name = getattr(user, "name", None)
+    if not name and user.profile:
         name = user.profile.display_name or (
             f"{user.profile.first_name or ''} {user.profile.last_name or ''}".strip() or None
         )
@@ -39,6 +39,7 @@ def _to_user_item(user: User) -> UserListItem:
         id=user.id,
         email=str(user.email),
         name=name,
+        role=getattr(user, "role", "user") or "user",
         is_active=user.is_active,
         email_verified=user.email_verified,
         created_at=user.created_at,

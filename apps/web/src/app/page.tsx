@@ -10,7 +10,12 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!ready) return;
-    router.replace(user ? "/dashboard" : "/login");
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
+    const isAdmin = (user.role ?? "user") === "admin";
+    router.replace(isAdmin ? "/admin" : "/dashboard");
   }, [ready, user, router]);
 
   return (
