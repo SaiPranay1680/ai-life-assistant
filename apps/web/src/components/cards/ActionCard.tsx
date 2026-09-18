@@ -21,6 +21,15 @@ export function ActionRow({ action }: { action: ActionItem }) {
   );
 }
 
+const typeLabel: Record<string, string> = {
+  PAY: "Pay",
+  RENEW: "Renew",
+  REVIEW: "Review",
+  REGISTER: "Register",
+  FOLLOW_UP: "Follow up",
+  KEEP_FOR_RECORDS: "Keep",
+};
+
 export function ActionCard({
   action,
   reminder,
@@ -39,14 +48,14 @@ export function ActionCard({
   return (
     <div className="mx-auto w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
       <span className="inline-flex rounded-full bg-orange-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-orange-700">
-        Renew
+        {typeLabel[action.actionType ?? ""] || "Action"}
       </span>
       <h2 className="mt-4 text-2xl font-semibold text-slate-900">{action.title}</h2>
       <p className="mt-2 text-slate-500">{action.reason}</p>
       <div className="mt-5 rounded-xl bg-blue-50 p-4">
         <p className="text-sm font-semibold text-blue-800">Why this was suggested</p>
         <p className="mt-1 text-sm text-blue-900">
-          Source: car-insurance-policy.pdf • Expiry Date field • Page 1
+          {action.evidence || "Suggested from the details you confirmed."}
         </p>
         <p className="mt-2 text-xs text-slate-500">AI confidence: High</p>
       </div>
@@ -66,8 +75,9 @@ export function ActionCard({
       <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
         <button
           type="button"
+          disabled={busy}
           onClick={onDismiss}
-          className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-800"
+          className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-800 disabled:opacity-50"
         >
           Not needed
         </button>

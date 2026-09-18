@@ -13,7 +13,8 @@ export type DocumentStatus =
   | "Warranty active"
   | "No action"
   | "Processing"
-  | "Needs review";
+  | "Needs review"
+  | "Reviewed";
 
 export type User = {
   id: string;
@@ -39,6 +40,8 @@ export type ActionItem = {
   reason: string;
   reminderDefault: string;
   status: "suggested" | "reminder_set" | "dismissed";
+  actionType?: string;
+  evidence?: string;
 };
 
 export type VaultDocument = {
@@ -68,6 +71,7 @@ export type ExtractedFields = {
   documentType: string;
   provider: string;
   policyNumber: string;
+  startDate: string;
   expiryDate: string;
   premium: string;
   previewTitle: string;

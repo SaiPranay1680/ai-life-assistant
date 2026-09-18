@@ -3,7 +3,7 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { DocumentCard } from "@/components/cards/DocumentCard";
 import { Button } from "@/components/ui/Button";
-import { getDocuments } from "@/services/api/document.service";
+import { deleteDocument, getDocuments, viewDocumentFile } from "@/services/api/document.service";
 import { useQuery } from "@tanstack/react-query";
 import { Plus, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -39,11 +39,12 @@ export default function DocumentsPage() {
           Upload
         </Button>
       </div>
-      <div className="mt-6 hidden grid-cols-4 px-4 text-xs font-medium tracking-wide text-slate-400 uppercase sm:grid">
+      <div className="mt-6 hidden grid-cols-5 px-4 text-xs font-medium tracking-wide text-slate-400 uppercase sm:grid">
         <span>Document</span>
         <span>Type</span>
         <span>Important date</span>
-        <span className="text-right">Status</span>
+        <span>Status</span>
+        <span className="text-right">Actions</span>
       </div>
       <div className="mt-2 space-y-2">
         {query.isLoading ? (
@@ -55,7 +56,24 @@ export default function DocumentsPage() {
           </p>
         ) : (
           filtered.map((document) => (
-            <DocumentCard key={document.id} document={document} />
+            <DocumentCard
+              key={document.id}
+              document={document}
+              onView={() => {
+                void viewDocumentFile(document.id, document.name).catch((error) => {
+                  window.alert(error instanceof Error ? error.message : "Unable to open file.");
+                });
+              }}
+              onReview={() => router.push(`/documents/review?id=${encodeURIComponent(document.id)}`)}
+              onDelete={() => {
+                if (!window.confirm(`Delete ${document.name}?`)) return;
+                void deleteDocument(document.id)
+                  .then(() => query.refetch())
+                  .catch((error) => {
+                    window.alert(error instanceof Error ? error.message : "Unable to delete.");
+                  });
+              }}
+            />
           ))
         )}
       </div>

@@ -19,7 +19,7 @@ export default function UploadPage() {
     try {
       const result = await uploadDocument(file);
       router.push(
-        `/documents/processing?file=${encodeURIComponent(result.fileName)}`,
+        `/documents/processing?id=${encodeURIComponent(result.id)}&file=${encodeURIComponent(result.fileName)}`,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed.");
