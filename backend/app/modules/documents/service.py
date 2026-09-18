@@ -17,7 +17,6 @@ from .schemas import DocumentOut, ExtractionOut, ExtractionUpdate, UploadRespons
 from .validation import detect_mime, safe_filename, validate_extension, validate_file_type
 
 CHUNK_SIZE = 1024 * 1024
-_processing: set[UUID] = set()
 
 
 def _to_out(document: Document, important_date: str | None = None) -> DocumentOut:
@@ -63,9 +62,6 @@ async def get_document(db: AsyncSession, user: CurrentUser, document_id: UUID) -
     document = result.scalar_one_or_none()
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
-    if document.processing_status in ("uploaded", "processing", "ocr_required"):
-        await process_document(db, document)
-        await db.refresh(document)
     date_row = await db.execute(
         select(ExtractionField).where(
             ExtractionField.document_id == document.id,
@@ -153,15 +149,24 @@ async def upload_document(db: AsyncSession, user: CurrentUser, file: UploadFile)
         sha256=digest,
         storage_key=relative_key.replace("\\", "/"),
         scan_status="clean",
-        processing_status="uploaded",
+        processing_status="queued",
     )
     db.add(document)
     await db.commit()
     await db.refresh(document)
 
+    from ...worker.tasks import process_document_task
+
+    try:
+        process_document_task.delay(str(document.id))
+    except Exception:
+        document.processing_status = "failed"
+        await db.commit()
+        await db.refresh(document)
+
     return UploadResponse(
         id=document.id,
-        status=document.processing_status or "uploaded",
+        status=document.processing_status or "queued",
         original_filename=filename,
     )
 
@@ -170,21 +175,7 @@ def _field_map(rows: list[ExtractionField]) -> dict[str, str]:
     return {row.field_name: (row.raw_value or row.normalized_value or "") for row in rows}
 
 
-async def process_document(db: AsyncSession, document: Document) -> None:
-    if document.id in _processing:
-        while document.id in _processing:
-            await asyncio.sleep(0.25)
-        await db.refresh(document)
-        return
-
-    _processing.add(document.id)
-    try:
-        await _process_document(db, document)
-    finally:
-        _processing.discard(document.id)
-
-
-async def _process_document(db: AsyncSession, document: Document) -> None:
+async def process_document_pipeline(db: AsyncSession, document: Document) -> None:
     document.processing_status = "processing"
     await db.commit()
 
@@ -299,9 +290,6 @@ async def get_extraction(db: AsyncSession, user: CurrentUser, document_id: UUID)
     document = result.scalar_one_or_none()
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
-    if document.processing_status in ("uploaded", "processing", "ocr_required"):
-        await process_document(db, document)
-        await db.refresh(document)
 
     rows = await db.execute(
         select(ExtractionField).where(
@@ -340,9 +328,11 @@ async def update_extraction(
     document = result.scalar_one_or_none()
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
-    if document.processing_status in ("uploaded", "processing", "ocr_required"):
-        await process_document(db, document)
-        await db.refresh(document)
+    if document.processing_status in ("uploaded", "queued", "processing", "ocr_required"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Document is still processing. Try again when review is ready.",
+        )
     if document.processing_status == "failed":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
