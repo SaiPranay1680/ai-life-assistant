@@ -101,6 +101,17 @@ export async function register(email: string, password: string, name?: string): 
   }
 }
 
+export async function updateProfile(name: string): Promise<User> {
+  try {
+    const { data } = await apiClient.patch<AuthUser>("/me", { name });
+    const user: User = { id: data.id, name: data.name, email: data.email };
+    window.localStorage.setItem(AUTH_KEY, JSON.stringify(user));
+    return user;
+  } catch (error) {
+    throw apiError(error, "Unable to save your name.");
+  }
+}
+
 export async function resetPassword(
   email: string,
   newPassword: string,

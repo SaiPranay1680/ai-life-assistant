@@ -5,17 +5,22 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { useAuth } from "@/hooks/useAuth";
+import { downloadWorkspaceExport } from "@/services/api/privacy.service";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export default function SettingsPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, updateProfile } = useAuth();
   const router = useRouter();
   const [name, setName] = useState(user?.name ?? "");
   const [emailReminders, setEmailReminders] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(false);
   const [dataSharing, setDataSharing] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileMessage, setProfileMessage] = useState<string | null>(null);
 
   return (
     <AppShell>
@@ -25,6 +30,22 @@ export default function SettingsPage() {
           <div className="mt-4 space-y-4">
             <Input label="Name" value={name} onChange={(event) => setName(event.target.value)} />
             <Input label="Email" value={user?.email ?? ""} disabled />
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                disabled={savingProfile || !name.trim() || name.trim() === user?.name}
+                onClick={() => {
+                  setProfileMessage(null);
+                  setSavingProfile(true);
+                  void updateProfile(name)
+                    .then(() => setProfileMessage("Name saved. Your dashboard greeting has been updated."))
+                    .catch((error) => setProfileMessage(error instanceof Error ? error.message : "Unable to save your name."))
+                    .finally(() => setSavingProfile(false));
+                }}
+              >
+                {savingProfile ? "Saving…" : "Save name"}
+              </Button>
+              {profileMessage ? <p className="text-sm text-slate-600">{profileMessage}</p> : null}
+            </div>
           </div>
         </section>
         <section className="rounded-2xl border border-slate-200 bg-white p-6">
@@ -44,6 +65,21 @@ export default function SettingsPage() {
           >
             Delete account
           </Button>
+          <Button
+            variant="secondary"
+            className="mt-3"
+            disabled={exporting}
+            onClick={() => {
+              setExportError(null);
+              setExporting(true);
+              void downloadWorkspaceExport()
+                .catch((error) => setExportError(error instanceof Error ? error.message : "Unable to export data."))
+                .finally(() => setExporting(false));
+            }}
+          >
+            {exporting ? "Preparing export…" : "Download my data"}
+          </Button>
+          {exportError ? <p className="mt-3 text-sm text-rose-600">{exportError}</p> : null}
         </section>
         <section className="rounded-2xl border border-slate-200 bg-white p-6">
           <h2 className="text-lg font-semibold">Notifications</h2>

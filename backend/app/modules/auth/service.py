@@ -106,3 +106,28 @@ async def get_me(db: AsyncSession, user_id) -> UserOut:
         name=name,
         workspace=WorkspaceOut(id=user.workspace.id, name=user.workspace.name),
     )
+
+
+async def update_profile(db: AsyncSession, user_id, name: str) -> UserOut:
+    display_name = name.strip()
+    if not display_name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Name cannot be blank.")
+
+    user = await _load_user_graph(db, user_id)
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found.")
+    if user.workspace is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Workspace not found.")
+
+    if user.profile is None:
+        user.profile = UserProfile(user_id=user.id, display_name=display_name)
+    else:
+        user.profile.display_name = display_name
+    await db.commit()
+    await db.refresh(user.profile)
+    return UserOut(
+        id=user.id,
+        email=str(user.email),
+        name=display_name,
+        workspace=WorkspaceOut(id=user.workspace.id, name=user.workspace.name),
+    )
