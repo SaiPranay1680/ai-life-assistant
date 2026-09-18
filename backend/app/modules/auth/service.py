@@ -8,7 +8,15 @@ from sqlalchemy.orm import selectinload
 
 from ...core.security import create_access_token, hash_password, verify_password
 from ...models.user import User, UserProfile, Workspace
-from .schemas import AuthResponse, LoginRequest, RegisterRequest, UserOut, WorkspaceOut
+from .schemas import (
+    AuthResponse,
+    LoginRequest,
+    RegisterRequest,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
+    UserOut,
+    WorkspaceOut,
+)
 
 
 def _display_name(email: str, name: str | None) -> str:
@@ -106,3 +114,33 @@ async def get_me(db: AsyncSession, user_id) -> UserOut:
         name=name,
         workspace=WorkspaceOut(id=user.workspace.id, name=user.workspace.name),
     )
+
+
+async def reset_password(db: AsyncSession, payload: ResetPasswordRequest) -> ResetPasswordResponse:
+    if payload.new_password != payload.confirm_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Passwords do not match.",
+        )
+
+    result = await db.execute(
+        select(User).where(User.email == str(payload.email).lower())
+    )
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User with this email does not exist.",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User account is deactivated.",
+        )
+
+    user.password_hash = hash_password(payload.new_password)
+    user.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    return ResetPasswordResponse(message="Password reset successfully. You can now sign in.")

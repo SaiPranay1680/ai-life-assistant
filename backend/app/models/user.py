@@ -1,3 +1,4 @@
+import uuid
 import sqlalchemy as sa
 from sqlalchemy import Boolean, Column, ForeignKey, Text, TIMESTAMP
 from sqlalchemy.dialects.postgresql import CITEXT, UUID
@@ -9,7 +10,12 @@ from ..db import Base
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=sa.text("gen_random_uuid()"),
+    )
     email = Column(CITEXT(), unique=True, index=True, nullable=False)
     password_hash = Column(Text, nullable=True)
     is_active = Column(Boolean, nullable=False, server_default=sa.true())
@@ -39,7 +45,12 @@ class UserProfile(Base):
 class Workspace(Base):
     __tablename__ = "workspaces"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()"))
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=sa.text("gen_random_uuid()"),
+    )
     name = Column(Text, nullable=False)
     owner_user_id = Column(
         UUID(as_uuid=True),
