@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { useAuth } from "@/hooks/useAuth";
+import { downloadWorkspaceExport } from "@/services/api/privacy.service";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -16,6 +17,8 @@ export default function SettingsPage() {
   const [pushNotifications, setPushNotifications] = useState(false);
   const [dataSharing, setDataSharing] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   return (
     <AppShell>
@@ -44,6 +47,21 @@ export default function SettingsPage() {
           >
             Delete account
           </Button>
+          <Button
+            variant="secondary"
+            className="mt-3"
+            disabled={exporting}
+            onClick={() => {
+              setExportError(null);
+              setExporting(true);
+              void downloadWorkspaceExport()
+                .catch((error) => setExportError(error instanceof Error ? error.message : "Unable to export data."))
+                .finally(() => setExporting(false));
+            }}
+          >
+            {exporting ? "Preparing export…" : "Download my data"}
+          </Button>
+          {exportError ? <p className="mt-3 text-sm text-rose-600">{exportError}</p> : null}
         </section>
         <section className="rounded-2xl border border-slate-200 bg-white p-6">
           <h2 className="text-lg font-semibold">Notifications</h2>
