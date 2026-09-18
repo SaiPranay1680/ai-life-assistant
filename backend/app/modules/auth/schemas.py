@@ -14,6 +14,10 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=6, max_length=72)
 
 
+class ProfileUpdateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
 class WorkspaceOut(BaseModel):
     id: UUID
     name: str
