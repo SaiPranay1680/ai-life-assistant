@@ -8,11 +8,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.config import settings
+from ...models.audit import record_audit
 from ...models.documents import Document
 from ...models.extraction import ExtractionField
+from ...security.scanner import ScannerUnavailable, get_scanner
+from ...storage.factory import get_storage
 from ..auth.deps import CurrentUser
 from .extract import DOCUMENT_TYPES, FieldHit, empty_field, guess_fields, normalize_amount, normalize_date, read_document_pages
-from .scan import scan_path
 from .schemas import DocumentOut, ExtractionOut, ExtractionUpdate, UploadResponse
 from .validation import detect_mime, safe_filename, validate_extension, validate_file_type
 
@@ -74,51 +76,70 @@ async def get_document(db: AsyncSession, user: CurrentUser, document_id: UUID) -
     return _to_out(document, important_date)
 
 
-async def upload_document(db: AsyncSession, user: CurrentUser, file: UploadFile) -> UploadResponse:
+async def upload_document(
+    db: AsyncSession,
+    user: CurrentUser,
+    file: UploadFile,
+    *,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+) -> UploadResponse:
     filename = safe_filename(file.filename)
     try:
         extension = validate_extension(filename)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail=str(exc)) from exc
 
+    storage = get_storage()
+    try:
+        await storage.cleanup_orphans(settings.quarantine_ttl_seconds)
+    except Exception:
+        pass
+
     document_id = uuid4()
     relative_key = f"workspaces/{user.workspace_id}/documents/{document_id}/original{extension}"
-    dest = Path(settings.upload_dir) / relative_key
-    dest.parent.mkdir(parents=True, exist_ok=True)
-
     sha256 = hashlib.sha256()
     total_size = 0
     first_bytes = b""
 
+    async def chunks():
+        nonlocal total_size, first_bytes
+        while True:
+            chunk = await file.read(CHUNK_SIZE)
+            if not chunk:
+                break
+            total_size += len(chunk)
+            if total_size > settings.max_upload_bytes:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail="File must be 20 MB or smaller.",
+                )
+            if len(first_bytes) < 16:
+                first_bytes += chunk[:16]
+            sha256.update(chunk)
+            yield chunk
+
+    async def reject_quarantine() -> None:
+        await storage.delete_quarantine(relative_key)
+
     try:
-        with dest.open("wb") as handle:
-            while True:
-                chunk = await file.read(CHUNK_SIZE)
-                if not chunk:
-                    break
-                total_size += len(chunk)
-                if total_size > settings.max_upload_bytes:
-                    raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File must be 20 MB or smaller.")
-                if len(first_bytes) < 16:
-                    first_bytes += chunk[:16]
-                sha256.update(chunk)
-                handle.write(chunk)
+        await storage.save_quarantine(relative_key, chunks())
     except HTTPException:
-        dest.unlink(missing_ok=True)
+        await reject_quarantine()
         raise
     except Exception:
-        dest.unlink(missing_ok=True)
+        await reject_quarantine()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not read the file.") from None
 
     if total_size == 0:
-        dest.unlink(missing_ok=True)
+        await reject_quarantine()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File is empty.")
 
     detected_mime = detect_mime(first_bytes)
     try:
         validate_file_type(extension, detected_mime)
     except ValueError as exc:
-        dest.unlink(missing_ok=True)
+        await reject_quarantine()
         raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail=str(exc)) from exc
 
     digest = sha256.hexdigest()
@@ -129,13 +150,59 @@ async def upload_document(db: AsyncSession, user: CurrentUser, file: UploadFile)
         )
     )
     if existing.scalar_one_or_none() is not None:
-        dest.unlink(missing_ok=True)
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This document appears to have already been uploaded.")
+        await reject_quarantine()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This document appears to have already been uploaded.",
+        )
 
-    scan_status = await asyncio.to_thread(scan_path, dest)
-    if scan_status != "clean":
-        dest.unlink(missing_ok=True)
+    audit_meta = {
+        "workspace_id": str(user.workspace_id),
+        "document_id": str(document_id),
+        "sha256": digest,
+        "original_filename": filename,
+    }
+    try:
+        async with storage.open_for_read(relative_key, location="quarantine") as quarantine_path:
+            scan_result = await get_scanner().scan(quarantine_path)
+    except ScannerUnavailable:
+        await reject_quarantine()
+        await record_audit(
+            db,
+            user_id=user.id,
+            event="UPLOAD_REJECTED_SCANNER_UNAVAILABLE",
+            metadata=audit_meta,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="File security scanning is temporarily unavailable.",
+        ) from None
+    except Exception:
+        await reject_quarantine()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This file failed the security scan.") from None
+
+    if not scan_result.clean:
+        await reject_quarantine()
+        await record_audit(
+            db,
+            user_id=user.id,
+            event="MALWARE_REJECTED",
+            metadata={**audit_meta, "threat_name": scan_result.threat_name, "scan_source": scan_result.source},
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        await db.commit()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This file failed the security scan.")
+
+    try:
+        await storage.promote(relative_key)
+    except Exception:
+        await reject_quarantine()
+        await storage.delete_permanent(relative_key)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not store the file.") from None
 
     document = Document(
         id=document_id,
@@ -152,8 +219,12 @@ async def upload_document(db: AsyncSession, user: CurrentUser, file: UploadFile)
         processing_status="queued",
     )
     db.add(document)
-    await db.commit()
-    await db.refresh(document)
+    try:
+        await db.commit()
+        await db.refresh(document)
+    except Exception:
+        await storage.delete_permanent(relative_key)
+        raise
 
     from ...worker.tasks import process_document_task
 
@@ -179,40 +250,24 @@ async def process_document_pipeline(db: AsyncSession, document: Document) -> Non
     document.processing_status = "processing"
     await db.commit()
 
-    path = Path(settings.upload_dir) / (document.storage_key or "")
-    extension = (document.extension or "").lower()
-    is_pdf = extension == ".pdf" or (document.detected_mime == "application/pdf")
-
-    if not path.exists():
+    if (document.scan_status or "") != "clean" or not document.storage_key:
         document.processing_status = "failed"
         await db.commit()
         return
 
-    if (document.scan_status or "") != "clean":
-        scan_status = await asyncio.to_thread(scan_path, path)
-        document.scan_status = scan_status
-        if scan_status != "clean":
-            document.processing_status = "failed"
-            await _replace_fields(
-                db,
-                document,
-                {
-                    "documentType": FieldHit("Important document", "Important document", 0.2, "", 1),
-                    "provider": empty_field(),
-                    "policyNumber": empty_field(),
-                    "startDate": empty_field(),
-                    "expiryDate": empty_field(),
-                    "premium": empty_field(),
-                    "preview": FieldHit("This file failed the security scan.", "", 0.2, "", 1),
-                },
-            )
-            await db.commit()
-            return
+    storage = get_storage()
+    if not await storage.exists_permanent(document.storage_key):
+        document.processing_status = "failed"
         await db.commit()
+        return
+
+    extension = (document.extension or "").lower()
+    is_pdf = extension == ".pdf" or (document.detected_mime == "application/pdf")
 
     pages: list[tuple[int, str]] = []
     try:
-        pages = await asyncio.to_thread(read_document_pages, path, is_pdf)
+        async with storage.open_for_read(document.storage_key, location="permanent") as path:
+            pages = await asyncio.to_thread(read_document_pages, path, is_pdf)
     except Exception:
         document.processing_status = "failed"
         await db.commit()
@@ -391,7 +446,7 @@ async def update_extraction(
     return await get_extraction(db, user, document_id)
 
 
-async def get_file_path(db: AsyncSession, user: CurrentUser, document_id: UUID) -> tuple[Path, str, str]:
+async def get_file_path(db: AsyncSession, user: CurrentUser, document_id: UUID) -> tuple[Path, str, str, bool]:
     result = await db.execute(
         select(Document).where(
             Document.id == document_id,
@@ -401,10 +456,13 @@ async def get_file_path(db: AsyncSession, user: CurrentUser, document_id: UUID) 
     document = result.scalar_one_or_none()
     if document is None or not document.storage_key:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
-    path = Path(settings.upload_dir) / document.storage_key
-    if not path.exists():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
-    return path, document.detected_mime or "application/octet-stream", document.original_filename or path.name
+    storage = get_storage()
+    try:
+        path, is_temp = await storage.materialize(document.storage_key, location="permanent")
+    except FileNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.") from None
+    filename = document.original_filename or Path(document.storage_key).name
+    return path, document.detected_mime or "application/octet-stream", filename, is_temp
 
 
 async def delete_document(db: AsyncSession, user: CurrentUser, document_id: UUID) -> None:
@@ -417,14 +475,8 @@ async def delete_document(db: AsyncSession, user: CurrentUser, document_id: UUID
     document = result.scalar_one_or_none()
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
-    path = Path(settings.upload_dir) / (document.storage_key or "")
+    storage_key = document.storage_key
     await db.delete(document)
     await db.commit()
-    if path.exists():
-        path.unlink()
-    parent = path.parent
-    if parent.exists() and parent != Path(settings.upload_dir):
-        try:
-            parent.rmdir()
-        except OSError:
-            pass
+    if storage_key:
+        await get_storage().delete_permanent(storage_key)

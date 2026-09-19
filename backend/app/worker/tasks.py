@@ -8,6 +8,7 @@ from sqlalchemy.pool import NullPool
 from app.core.config import settings
 from app.models.documents import Document
 from app.modules.documents import service as documents_service
+from app.storage.factory import get_storage
 from app.worker.celery_app import celery_app
 
 
@@ -44,3 +45,12 @@ async def _run(document_id: str) -> str:
             return document.processing_status or "unknown"
     finally:
         await engine.dispose()
+
+
+@celery_app.task(name="storage.cleanup_quarantine")
+def cleanup_quarantine_task() -> int:
+    return asyncio.run(_cleanup_quarantine())
+
+
+async def _cleanup_quarantine() -> int:
+    return await get_storage().cleanup_orphans(settings.quarantine_ttl_seconds)
