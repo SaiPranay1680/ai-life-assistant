@@ -129,17 +129,28 @@ Playbook task 41.
 
 ---
 
+## UPLOAD-001 — Secure quarantine flow
+
+| Field | Value |
+| --- | --- |
+| Status | Done for local; S3 adapter ready (STOR-001 live buckets still operator work) |
+| Do now | Upload to quarantine, validate, scan, then promote. Rejected/orphan files never stay in permanent storage |
+| Storage | `STORAGE_BACKEND=local` (staging) or `s3` (live). Logical key stays `workspaces/{workspace_id}/documents/{document_id}/original{ext}` |
+| Rule | Untrusted files never enter permanent storage before passing checks. OCR runs only after `scan_status=clean` and promote |
+
+---
+
 ## SEC-001 — ClamAV malware scan
 
 Playbook task 32 remainder (daemon).
 
 | Field | Value |
 | --- | --- |
-| Status | Not started (daemon) |
-| Do now (Phase 4) | Local scan before OCR: EICAR, executable/polyglot, dangerous PDF `/Launch`. Optional `clamscan` if installed. Infected files are rejected and never OCR’d. `scan_status` = `clean` or `infected` |
-| Do later | ClamAV daemon (clamd) in Docker/Compose, fail closed if scanner is down |
+| Status | Done in app (clamd client, fail closed when `CLAMAV_REQUIRED=true`) |
+| Do now (Phase 4) | Local scan before OCR: EICAR, executable/polyglot, dangerous PDF `/Launch`. Infected files are rejected and never OCR’d. `scan_status` = `clean` or `infected` |
+| Operator | Run ClamAV daemon (`docker compose -f docker-compose.clamav.yml up -d`). Staging/live: `CLAMAV_REQUIRED=true` |
 | When | Phase 8–9, with DEVOPS-001 |
-| Rule | Unscanned files must not enter OCR |
+| Rule | Unscanned files must not enter OCR. Scanner down → upload rejected, quarantine deleted, audit event `UPLOAD_REJECTED_SCANNER_UNAVAILABLE` |
 
 ---
 
@@ -147,12 +158,12 @@ Playbook task 32 remainder (daemon).
 
 | Field | Value |
 | --- | --- |
-| Status | Not started |
-| Do now (Phase 3–5) | Save files under `backend/uploads/`. Postgres stores `storage_key`, size, mime, sha256 — not PDF bytes |
-| Do later | AWS S3 (private bucket, FastAPI keys only). Presigned upload URLs (playbook task 30) |
+| Status | Adapter implemented; live buckets/IAM not provisioned |
+| Do now (Phase 3–5) | Save files under `backend/uploads/` when `STORAGE_BACKEND=local`. Postgres stores `storage_key`, size, mime, sha256 — not PDF bytes |
+| Do later | Provision private S3 buckets and set `STORAGE_BACKEND=s3`. Presigned upload URLs (playbook task 30) are still later |
 | When | Phase 8–9, before real users / production |
 | Do not do in | Phase 3 login, Phase 4 extract, Phase 5 actions |
-| Why later | Needs AWS account, IAM keys, bucket policy. Local folder proves the same upload path |
+| Why later | Needs AWS account, IAM role, bucket policy. Local folder proves the same upload path |
 | Rules that stay the same | Backend chooses the path `workspaces/{workspace_id}/documents/{document_id}/original.pdf`. Never `NEXT_PUBLIC_` AWS secrets. Never put PDFs in Postgres. Duplicate check is `(workspace_id, sha256)` |
 
 ### Phase 3–5 done when
