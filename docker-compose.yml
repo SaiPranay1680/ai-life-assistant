@@ -1,0 +1,196 @@
+# Single Compose file for local/STG Docker. One command starts the full stack:
+#   docker compose up --build
+#
+# Host (browser) URLs — use localhost:
+#   frontend  http://localhost:3000
+#   backend   http://localhost:8000
+#
+# Container-to-container URLs — use Docker service names:
+#   postgres:5432  redis:6379  backend:8000
+#
+# Postgres and Redis ports are not published. They stay on the internal network
+# unless you add host port mappings for local debugging.
+
+name: ai-life-assistant
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - app
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - app
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+      FRONTEND_URL: ${FRONTEND_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ALGORITHM: ${JWT_ALGORITHM}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
+      STORAGE_BACKEND: ${STORAGE_BACKEND}
+      UPLOAD_DIR: ${UPLOAD_DIR}
+      QUARANTINE_DIR: ${QUARANTINE_DIR}
+      QUARANTINE_TTL_SECONDS: ${QUARANTINE_TTL_SECONDS}
+      CLAMAV_HOST: ${CLAMAV_HOST}
+      CLAMAV_PORT: ${CLAMAV_PORT}
+      CLAMAV_REQUIRED: ${CLAMAV_REQUIRED}
+      CLAMAV_TIMEOUT_SECONDS: ${CLAMAV_TIMEOUT_SECONDS}
+    volumes:
+      - backend_uploads:/data/uploads
+      - backend_quarantine:/data/quarantine
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    networks:
+      - app
+
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command:
+      [
+        "celery",
+        "-A",
+        "app.worker.celery_app.celery_app",
+        "worker",
+        "--loglevel=info",
+      ]
+    env_file:
+      - .env
+    environment:
+      SKIP_MIGRATIONS: "1"
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+      STORAGE_BACKEND: ${STORAGE_BACKEND}
+      UPLOAD_DIR: ${UPLOAD_DIR}
+      QUARANTINE_DIR: ${QUARANTINE_DIR}
+      QUARANTINE_TTL_SECONDS: ${QUARANTINE_TTL_SECONDS}
+      CLAMAV_HOST: ${CLAMAV_HOST}
+      CLAMAV_PORT: ${CLAMAV_PORT}
+      CLAMAV_REQUIRED: ${CLAMAV_REQUIRED}
+      CLAMAV_TIMEOUT_SECONDS: ${CLAMAV_TIMEOUT_SECONDS}
+    volumes:
+      - backend_uploads:/data/uploads
+      - backend_quarantine:/data/quarantine
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - app
+
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command:
+      [
+        "celery",
+        "-A",
+        "app.worker.celery_app.celery_app",
+        "beat",
+        "--loglevel=info",
+      ]
+    env_file:
+      - .env
+    environment:
+      SKIP_MIGRATIONS: "1"
+      DATABASE_URL: ${DATABASE_URL}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+      STORAGE_BACKEND: ${STORAGE_BACKEND}
+      QUARANTINE_DIR: ${QUARANTINE_DIR}
+      QUARANTINE_TTL_SECONDS: ${QUARANTINE_TTL_SECONDS}
+    volumes:
+      - backend_quarantine:/data/quarantine
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - app
+
+  frontend:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app
+
+networks:
+  app:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_uploads:
+  backend_quarantine:

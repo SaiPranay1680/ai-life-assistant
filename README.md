@@ -39,14 +39,268 @@ Important:
 
 ---
 
-## Prerequisites
+## Run with Docker (recommended)
 
-Before running the project, install the following:
+This is the fastest way for a new developer to run the **full stack** (PostgreSQL, Redis, FastAPI, Celery worker, Celery beat, Next.js) without installing Python, Node, Postgres, or Redis on the host.
+
+You only need:
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows/Mac) or Docker Engine + Compose v2 (Linux)
+- Git
+
+### What starts
+
+```text
+                    Docker Compose
+                         │
+        ┌────────────────┼────────────────┐
+        │                │                │
+     Next.js          FastAPI          Celery
+     :3000             :8000           worker + beat
+        │                │                │
+        └────────────────┼────────────────┘
+                         │
+                    ┌────┴────┐
+                    │         │
+               PostgreSQL   Redis
+             (internal)   (internal)
+```
+
+After startup:
+
+| Service | URL / notes |
+| --- | --- |
+| Frontend (Next.js) | http://localhost:3000 |
+| Backend (FastAPI) | http://localhost:8000 |
+| API docs (Swagger) | http://localhost:8000/docs |
+| PostgreSQL | **not** published on the host — only other containers can reach `postgres:5432` |
+| Redis | **not** published on the host — only other containers can reach `redis:6379` |
+| Celery worker / beat | no HTTP port |
+
+Log in with the default admin account in [Default developer/admin account](#default-developeradmin-account) above.
+
+---
+
+### Step 1 — Clone the repository
+
+```bash
+git clone <your-repository-url>
+cd ai-life-assistant
+```
+
+---
+
+### Step 2 — Create your environment file
+
+Compose reads secrets from a root `.env` file (gitignored). Copy the template:
+
+**Windows (PowerShell):**
+
+```powershell
+copy .env.example .env
+```
+
+**macOS / Linux:**
+
+```bash
+cp .env.example .env
+```
+
+Open `.env` and change at least:
+
+- `POSTGRES_PASSWORD` — Docker Postgres password
+- `DATABASE_URL` — **must use the same user, password, and database name** as `POSTGRES_*` (host must stay `postgres`, not `localhost`)
+- `JWT_SECRET` — any long random string (do not leave the example value on a shared machine)
+
+Example shape (placeholders only):
+
+```env
+POSTGRES_DB=ai_life_assistant
+POSTGRES_USER=ai_app
+POSTGRES_PASSWORD=change_me
+
+DATABASE_URL=postgresql+asyncpg://ai_app:change_me@postgres:5432/ai_life_assistant
+REDIS_URL=redis://redis:6379/0
+CELERY_BROKER_URL=redis://redis:6379/0
+CELERY_RESULT_BACKEND=redis://redis:6379/1
+
+FRONTEND_URL=http://localhost:3000
+NEXT_PUBLIC_API_URL=http://localhost:8000
+JWT_SECRET=change_me_generate_a_long_random_string
+```
+
+**Important:**
+
+- Never commit `.env`.
+- Inside Docker, database and Redis hosts are service names (`postgres`, `redis`), not `localhost`.
+- `NEXT_PUBLIC_API_URL` and `FRONTEND_URL` must use `localhost`, because the **browser** runs on your machine, not inside the Docker network.
+- If you change `POSTGRES_PASSWORD`, update the password inside `DATABASE_URL` too.
+
+Leave `STORAGE_BACKEND=local` and `CLAMAV_REQUIRED=false` for a first run.
+
+---
+
+### Step 3 — Free ports 3000 and 8000
+
+Docker publishes:
+
+- `3000` → frontend
+- `8000` → backend
+
+If you already run Next.js or Uvicorn on the host, stop them first. Postgres on host port `5432` does **not** conflict, because Compose does not publish Postgres to the host.
+
+---
+
+### Step 4 — Start everything
+
+From the **repository root** (the folder that contains `docker-compose.yml`):
+
+```bash
+docker compose up --build
+```
+
+The first build can take several minutes (Python OCR/ML wheels and `npm run build`). Later starts are faster.
+
+Wait until you see the backend healthy and the frontend listening. Then open http://localhost:3000.
+
+SQL migrations run **automatically** when the `backend` container starts (`python scripts/run_migration.py`). You do not run Alembic for this project.
+
+---
+
+### Step 5 — Start in the background (optional)
+
+```bash
+docker compose up -d --build
+```
+
+Check status:
+
+```bash
+docker compose ps
+```
+
+Follow logs:
+
+```bash
+docker compose logs -f
+```
+
+One service:
+
+```bash
+docker compose logs -f backend
+docker compose logs -f frontend
+docker compose logs -f celery-worker
+docker compose logs -f celery-beat
+docker compose logs -f postgres
+docker compose logs -f redis
+```
+
+---
+
+### Step 6 — Stop
+
+Stop containers (keeps database, Redis, and uploaded files in Docker volumes):
+
+```bash
+docker compose down
+```
+
+Start again later without rebuilding (if images already exist):
+
+```bash
+docker compose up
+```
+
+**Delete all Docker data** for this project (database reset — destructive):
+
+```bash
+docker compose down -v
+```
+
+---
+
+### Daily Docker workflow
+
+| Task | Command |
+| --- | --- |
+| Start (foreground, rebuild) | `docker compose up --build` |
+| Start (background) | `docker compose up -d --build` |
+| Stop | `docker compose down` |
+| Status | `docker compose ps` |
+| Logs (all) | `docker compose logs -f` |
+| Restart API only | `docker compose restart backend` |
+| Shell in API container | `docker compose exec backend bash` |
+| Open Postgres inside Docker | `docker compose exec postgres psql -U ai_app -d ai_life_assistant` |
+| Re-run SQL migrations | `docker compose exec backend python scripts/run_migration.py` |
+
+After you change frontend env such as `NEXT_PUBLIC_API_URL`, rebuild the frontend image:
+
+```bash
+docker compose up -d --build frontend
+```
+
+---
+
+### How containers talk to each other
+
+| Caller | Address to use | Why |
+| --- | --- | --- |
+| Your browser → UI | `http://localhost:3000` | Browser is on the host |
+| Your browser → API | `http://localhost:8000` | JS in the browser cannot see Docker DNS names |
+| FastAPI / Celery → DB | `postgres:5432` | Docker service name |
+| FastAPI / Celery → Redis | `redis:6379` | Docker service name |
+
+Do **not** put `localhost` in `DATABASE_URL` or Redis URLs inside `.env` when using Compose. `localhost` inside a container means that container, not your laptop and not Postgres.
+
+Open the app as **http://localhost:3000** (not `127.0.0.1`) unless you also add `http://127.0.0.1:3000` to `FRONTEND_URL` (CORS).
+
+---
+
+### Optional: ClamAV (malware scan)
+
+Default Docker setup does **not** require ClamAV (`CLAMAV_REQUIRED=false`).
+
+To run ClamAV with the stack:
+
+1. In `.env` set `CLAMAV_HOST=clamav` and `CLAMAV_REQUIRED=true`
+2. Start with both Compose files:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.clamav.yml up --build
+```
+
+The first ClamAV start can take several minutes while virus definitions download.
+
+---
+
+### Docker troubleshooting
+
+| Symptom | What to try |
+| --- | --- |
+| `env file .env not found` | You skipped Step 2. Copy `.env.example` to `.env`. |
+| Port 3000 or 8000 already allocated | Stop the other app using that port, or change the left-hand port in `docker-compose.yml` (e.g. `"3001:3000"`). |
+| Frontend loads but API calls fail | Confirm backend is up: http://localhost:8000/health. Confirm `NEXT_PUBLIC_API_URL=http://localhost:8000`. Rebuild frontend if you changed that variable. |
+| CORS / login blocked | Use `http://localhost:3000` and keep `FRONTEND_URL=http://localhost:3000`. |
+| Documents stay on “Processing” | `docker compose logs -f celery-worker` — worker must be running and Redis healthy. |
+| Backend never becomes healthy | `docker compose logs -f backend` and `docker compose logs -f postgres`. Check `DATABASE_URL` password matches `POSTGRES_PASSWORD`. |
+| Need a clean database | `docker compose down -v` then `docker compose up --build`. This wipes Postgres data. |
+
+---
+
+## Local setup without Docker (manual)
+
+Use this path only if you are **not** using `docker compose`. You must install Python, Node, PostgreSQL, and Redis yourself and start FastAPI, Celery, and Next.js in separate terminals.
+
+### Prerequisites
+
+Install:
 
 - Python 3.11+
 - Node.js 18+
 - npm
 - PostgreSQL 14+ or 15+
+- Redis (for Celery)
 - `psql` client (recommended)
 - Git
 - VS Code or any terminal of your choice

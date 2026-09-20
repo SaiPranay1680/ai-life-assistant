@@ -1,9 +1,13 @@
+# Optional overlay. Start ClamAV with the main stack:
+#   docker compose -f docker-compose.yml -f docker-compose.clamav.yml up --build
+#
+# Then set in `.env`:
+#   CLAMAV_HOST=clamav
+#   CLAMAV_REQUIRED=true
+
 services:
   clamav:
     image: clamav/clamav:stable
-    container_name: ai-clamav
-    ports:
-      - "3310:3310"
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "clamdscan --ping 1 || exit 1"]
@@ -11,3 +15,21 @@ services:
       timeout: 10s
       retries: 8
       start_period: 180s
+    networks:
+      - app
+
+  backend:
+    environment:
+      CLAMAV_HOST: clamav
+      CLAMAV_REQUIRED: "true"
+    depends_on:
+      clamav:
+        condition: service_healthy
+
+  celery-worker:
+    environment:
+      CLAMAV_HOST: clamav
+      CLAMAV_REQUIRED: "true"
+    depends_on:
+      clamav:
+        condition: service_healthy

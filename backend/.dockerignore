@@ -1,0 +1,12 @@
+.git
+.venv
+__pycache__
+.pytest_cache
+*.pyc
+.env
+.env.local
+uploads
+quarantine
+sample-bill.pdf
+.DS_Store
+Thumbs.db
