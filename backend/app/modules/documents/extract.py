@@ -1,66 +1,22 @@
 import re
 import tempfile
-from datetime import date
 from pathlib import Path
-from typing import NamedTuple
 
 import pymupdf
 
+from .text import DATE_TOKEN, FieldHit, empty_field, normalize_amount, normalize_date
+
 AMOUNT_RE = re.compile(
     r"(?:₹|\u20b9|rs\.?|inr)?\s*([0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?|[0-9]+\.[0-9]{2})",
-    re.IGNORECASE,
-)
-DATE_TOKEN = re.compile(
-    r"(\d{1,2}\s+(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?,?\s+\d{2,4}"
-    r"|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}"
-    r"|\d{4}-\d{2}-\d{2})",
     re.IGNORECASE,
 )
 POLICY_RE = re.compile(
     r"(?:policy|account|invoice|bill)\s*(?:no\.?|number|#)\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-\/]{4,})",
     re.IGNORECASE,
 )
-DOCUMENT_TYPES = ("Bill", "Insurance", "Purchase", "Warranty", "Important document")
-MONTHS = {
-    "jan": 1,
-    "january": 1,
-    "feb": 2,
-    "february": 2,
-    "mar": 3,
-    "march": 3,
-    "apr": 4,
-    "april": 4,
-    "may": 5,
-    "jun": 6,
-    "june": 6,
-    "jul": 7,
-    "july": 7,
-    "aug": 8,
-    "august": 8,
-    "sep": 9,
-    "sept": 9,
-    "september": 9,
-    "oct": 10,
-    "october": 10,
-    "nov": 11,
-    "november": 11,
-    "dec": 12,
-    "december": 12,
-}
-
+DOCUMENT_TYPES = ("Bill", "Insurance", "Purchase", "Warranty", "Important document", "Other")
+OCR_DPI = 220
 _ocr = None
-
-
-class FieldHit(NamedTuple):
-    raw: str
-    normalized: str
-    confidence: float
-    evidence: str
-    page: int
-
-
-def empty_field(page: int = 1) -> FieldHit:
-    return FieldHit("", "", 0.0, "", page)
 
 
 def _ocr_engine():
@@ -75,9 +31,22 @@ def _ocr_engine():
     return _ocr
 
 
+def inspect_pdf(path: Path) -> tuple[int, bool]:
+    document = pymupdf.open(path)
+    try:
+        encrypted = bool(getattr(document, "is_encrypted", False))
+        if encrypted and not document.authenticate(""):
+            return int(document.page_count), True
+        return int(document.page_count), False
+    finally:
+        document.close()
+
+
 def extract_pdf_pages(path: Path) -> list[tuple[int, str]]:
     document = pymupdf.open(path)
     try:
+        if getattr(document, "is_encrypted", False) and not document.authenticate(""):
+            raise ValueError("This PDF is password protected.")
         return [(index, page.get_text() or "") for index, page in enumerate(document, start=1)]
     finally:
         document.close()
@@ -105,7 +74,7 @@ def ocr_pdf_pages(path: Path) -> list[tuple[int, str]]:
     parts: list[tuple[int, str]] = []
     try:
         for index, page in enumerate(document, start=1):
-            pix = page.get_pixmap(dpi=140)
+            pix = page.get_pixmap(dpi=OCR_DPI)
             tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
             tmp.close()
             tmp_path = Path(tmp.name)
@@ -140,49 +109,6 @@ def classify_document(text: str) -> str:
     if "bill" in lowered or "due date" in lowered or "amount due" in lowered:
         return "Bill"
     return "Important document"
-
-
-def _year(value: str) -> int:
-    year = int(value)
-    if year < 100:
-        return 2000 + year
-    return year
-
-
-def normalize_date(raw: str) -> str:
-    text = (raw or "").strip()
-    if not text:
-        return ""
-    iso = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", text)
-    if iso:
-        try:
-            return date(int(iso.group(1)), int(iso.group(2)), int(iso.group(3))).isoformat()
-        except ValueError:
-            return ""
-    named = re.fullmatch(
-        r"(\d{1,2})\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?,?\s+(\d{2,4})",
-        text,
-        flags=re.IGNORECASE,
-    )
-    if named:
-        month = MONTHS[named.group(2).lower().rstrip(".")]
-        try:
-            return date(_year(named.group(3)), month, int(named.group(1))).isoformat()
-        except ValueError:
-            return ""
-    numeric = re.fullmatch(r"(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})", text)
-    if numeric:
-        try:
-            return date(_year(numeric.group(3)), int(numeric.group(2)), int(numeric.group(1))).isoformat()
-        except ValueError:
-            return ""
-    return ""
-
-
-def normalize_amount(raw: str) -> str:
-    cleaned = (raw or "").replace(",", "")
-    match = re.search(r"\d+(?:\.\d{1,2})?", cleaned)
-    return match.group(0) if match else ""
 
 
 def _date_near(pages: list[tuple[int, str]], labels: tuple[str, ...]) -> FieldHit:

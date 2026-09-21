@@ -1,5 +1,5 @@
 import sqlalchemy as sa
-from sqlalchemy import BigInteger, Column, ForeignKey, String, Text, TIMESTAMP
+from sqlalchemy import BigInteger, Column, Float, ForeignKey, Integer, String, Text, TIMESTAMP
 from sqlalchemy.dialects.postgresql import UUID
 
 from ..db import Base
@@ -21,5 +21,11 @@ class Document(Base):
     scan_status = Column(String(50), server_default="pending")
     processing_status = Column(String(50), server_default="uploaded")
     document_type = Column(String(50))
+    purpose_status = Column(String(50))
+    purpose_category = Column(String(100))
+    purpose_subtype = Column(String(100))
+    purpose_reason = Column(Text)
+    purpose_confidence = Column(Float)
+    page_count = Column(Integer)
     created_at = Column(TIMESTAMP(timezone=True), server_default=sa.text("now()"))
     updated_at = Column(TIMESTAMP(timezone=True), server_default=sa.text("now()"))

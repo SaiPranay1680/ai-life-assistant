@@ -7,7 +7,7 @@ from starlette.background import BackgroundTask
 
 from ...db import get_db
 from ..auth.deps import CurrentUser, get_current_user
-from .schemas import DocumentOut, ExtractionOut, ExtractionUpdate, UploadResponse
+from .schemas import DocumentOut, ExtractionOut, ExtractionUpdate, PurposeDecisionIn, UploadResponse
 from . import service
 
 router = APIRouter(tags=["documents"])
@@ -47,6 +47,16 @@ async def update_extraction(
     db: AsyncSession = Depends(get_db),
 ):
     return await service.update_extraction(db, user, document_id, payload)
+
+
+@router.post("/documents/{document_id}/purpose", response_model=ExtractionOut)
+async def decide_purpose(
+    document_id: UUID,
+    payload: PurposeDecisionIn,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await service.decide_purpose(db, user, document_id, payload.decision)
 
 
 @router.get("/documents/{document_id}/file")

@@ -8,6 +8,9 @@ type ApiDocument = {
   document_type: string | null;
   processing_status: string;
   important_date?: string | null;
+  purpose_status?: string | null;
+  purpose_reason?: string | null;
+  purpose_category?: string | null;
   created_at: string | null;
 };
 
@@ -25,11 +28,14 @@ function mapType(value: string | null): DocumentType {
   if (key.includes("insurance")) return "Insurance";
   if (key.includes("purchase") || key.includes("invoice")) return "Purchase";
   if (key.includes("warranty")) return "Warranty";
+  if (key.includes("other")) return "Other";
   return "Important document";
 }
 
 function mapStatus(value: string): DocumentStatus {
   if (value === "ready_for_review" || value === "needs_review" || value === "ocr_required") return "Needs review";
+  if (value === "needs_decision") return "Decide";
+  if (value === "rejected") return "Rejected";
   if (value === "reviewed") return "Reviewed";
   if (value === "failed") return "Needs review";
   if (value === "uploaded" || value === "queued" || value === "processing") return "Processing";
@@ -62,6 +68,9 @@ export async function uploadDocument(file: File): Promise<{ fileName: string; id
   }
   if (file.size > 20 * 1024 * 1024) {
     throw new Error("File must be 20 MB or smaller.");
+  }
+  if (/jpe?g|png/i.test(file.type || file.name) && file.size > 10 * 1024 * 1024) {
+    throw new Error("Photos and scans must be 10 MB or smaller.");
   }
 
   const body = new FormData();
@@ -106,6 +115,18 @@ export async function updateExtraction(
     return data;
   } catch (error) {
     throw apiError(error, "Unable to save extraction.");
+  }
+}
+
+export async function decideDocumentPurpose(
+  documentId: string,
+  decision: "keep" | "discard",
+): Promise<ExtractedFields> {
+  try {
+    const { data } = await apiClient.post<ExtractedFields>(`/documents/${documentId}/purpose`, { decision });
+    return data;
+  } catch (error) {
+    throw apiError(error, "Unable to save that choice.");
   }
 }
 

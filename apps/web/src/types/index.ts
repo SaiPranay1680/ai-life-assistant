@@ -5,7 +5,8 @@ export type DocumentType =
   | "Insurance"
   | "Purchase"
   | "Warranty"
-  | "Important document";
+  | "Important document"
+  | "Other";
 
 export type DocumentStatus =
   | "Action created"
@@ -14,7 +15,9 @@ export type DocumentStatus =
   | "No action"
   | "Processing"
   | "Needs review"
-  | "Reviewed";
+  | "Reviewed"
+  | "Rejected"
+  | "Decide";
 
 export type User = {
   id: string;
@@ -86,6 +89,14 @@ export type ChatMessage = {
   sources?: string[];
 };
 
+export type ExtractedField = {
+  name: string;
+  value: string;
+  evidence: string;
+  page: number;
+  confidence: number;
+};
+
 export type ExtractedFields = {
   documentType: string;
   provider: string;
@@ -95,4 +106,9 @@ export type ExtractedFields = {
   premium: string;
   previewTitle: string;
   previewLines: string[];
+  processingStatus?: string;
+  purposeStatus?: string;
+  purposeReason?: string;
+  purposeCategory?: string;
+  fields?: ExtractedField[];
 };

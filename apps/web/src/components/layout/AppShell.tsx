@@ -25,8 +25,8 @@ const titles: Record<string, { title: string; subtitle?: string }> = {
     title: "Understanding your document",
   },
   "/documents/review": {
-    title: "Review extracted information",
-    subtitle: "Please verify the important details before we create an action.",
+    title: "Review details",
+    subtitle: "Confirm the extracted information to continue.",
   },
   "/documents": {
     title: "Document vault",

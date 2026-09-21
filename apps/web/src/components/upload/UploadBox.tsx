@@ -46,7 +46,7 @@ export function UploadBox({
       <p className="mt-4 text-lg font-semibold text-slate-900">
         Drag & drop your document here
       </p>
-      <p className="mt-2 text-sm text-slate-500">PDF, JPG or PNG • up to 20 MB</p>
+      <p className="mt-2 text-sm text-slate-500">PDF, JPG or PNG • PDFs up to 20 MB / 30 pages • images up to 10 MB</p>
       <input
         ref={inputRef}
         type="file"
