@@ -11,6 +11,7 @@ from ...models.documents import Document
 from ...models.extraction import ExtractionField
 from ...models.reminder import Reminder
 from ..auth.deps import CurrentUser
+from .constants import LISTABLE_STATUSES, TRANSITIONS
 from .schemas import ActionOut, ReminderCreate
 from .suggest import suggestions_for
 
@@ -20,14 +21,6 @@ REMINDER_DAYS = {
     "Remind me 7 days before": 7,
     "Remind me 3 days before": 3,
 }
-
-
-def _public_status(value: str | None) -> str:
-    if value == "confirmed":
-        return "reminder_set"
-    if value == "dismissed":
-        return "dismissed"
-    return "suggested"
 
 
 def _to_out(row: Action) -> ActionOut:
@@ -42,7 +35,10 @@ def _to_out(row: Action) -> ActionOut:
         reason=row.explanation or "",
         evidence=row.evidence or "",
         reminder_default=row.reminder_default or "Remind me 30 days before",
-        status=_public_status(row.status),
+        status=row.status or "suggested",
+        confirmed_by=row.confirmed_by,
+        confirmed_at=row.confirmed_at,
+        completed_at=row.completed_at,
     )
 
 
@@ -57,6 +53,10 @@ def _fire_at(due: date | None, days: int) -> datetime:
     return datetime.combine(when, time(9, 0), tzinfo=timezone.utc)
 
 
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 async def _get_owned(db: AsyncSession, user: CurrentUser, action_id: UUID) -> Action:
     result = await db.execute(
         select(Action).where(Action.id == action_id, Action.workspace_id == user.workspace_id)
@@ -67,23 +67,84 @@ async def _get_owned(db: AsyncSession, user: CurrentUser, action_id: UUID) -> Ac
     return action
 
 
+def _ensure_transition(action: Action, to_status: str) -> None:
+    current = action.status or "suggested"
+    allowed = TRANSITIONS.get(current, frozenset())
+    if to_status not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot move action from '{current}' to '{to_status}'.",
+        )
+
+
+def _mark_confirmed(action: Action, user: CurrentUser) -> None:
+    """Set confirmed metadata. Idempotent if already confirmed."""
+    if action.status == "suggested":
+        action.status = "confirmed"
+    if action.confirmed_by is None:
+        action.confirmed_by = user.id
+    if action.confirmed_at is None:
+        action.confirmed_at = _now()
+    action.updated_at = _now()
+
+
 async def list_actions(db: AsyncSession, user: CurrentUser) -> list[ActionOut]:
     await _suggest_from_reviewed(db, user)
     result = await db.execute(
         select(Action)
         .where(
             Action.workspace_id == user.workspace_id,
-            Action.status.in_(("suggested", "confirmed")),
+            Action.status.in_(LISTABLE_STATUSES),
         )
         .order_by(Action.due_at.is_(None), Action.due_at.asc(), Action.created_at.desc())
     )
     return [_to_out(row) for row in result.scalars().all()]
 
 
+async def confirm_action(db: AsyncSession, user: CurrentUser, action_id: UUID) -> ActionOut:
+    action = await _get_owned(db, user, action_id)
+    _ensure_transition(action, "confirmed")
+    _mark_confirmed(action, user)
+    await db.commit()
+    await db.refresh(action)
+    return _to_out(action)
+
+
+async def start_action(db: AsyncSession, user: CurrentUser, action_id: UUID) -> ActionOut:
+    action = await _get_owned(db, user, action_id)
+    _ensure_transition(action, "in_progress")
+    # Confirmed metadata should exist before work starts.
+    if action.confirmed_by is None:
+        action.confirmed_by = user.id
+    if action.confirmed_at is None:
+        action.confirmed_at = _now()
+    action.status = "in_progress"
+    action.updated_at = _now()
+    await db.commit()
+    await db.refresh(action)
+    return _to_out(action)
+
+
+async def complete_action(db: AsyncSession, user: CurrentUser, action_id: UUID) -> ActionOut:
+    action = await _get_owned(db, user, action_id)
+    _ensure_transition(action, "completed")
+    if action.confirmed_by is None:
+        action.confirmed_by = user.id
+    if action.confirmed_at is None:
+        action.confirmed_at = _now()
+    action.status = "completed"
+    action.completed_at = _now()
+    action.updated_at = _now()
+    await db.commit()
+    await db.refresh(action)
+    return _to_out(action)
+
+
 async def dismiss_action(db: AsyncSession, user: CurrentUser, action_id: UUID) -> ActionOut:
     action = await _get_owned(db, user, action_id)
+    _ensure_transition(action, "dismissed")
     action.status = "dismissed"
-    action.updated_at = datetime.now(timezone.utc)
+    action.updated_at = _now()
     await db.commit()
     await db.refresh(action)
     return _to_out(action)
@@ -96,12 +157,19 @@ async def create_reminder(
     payload: ReminderCreate,
 ) -> ActionOut:
     action = await _get_owned(db, user, action_id)
-    if action.status == "dismissed":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This action was dismissed.")
+    if action.status in ("dismissed", "completed"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot set a reminder on a {action.status} action.",
+        )
     label = (payload.reminder or "").strip()
     days = REMINDER_DAYS.get(label)
     if days is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Choose a valid reminder option.")
+
+    # Creating a reminder confirms the action when it is still only suggested.
+    if action.status == "suggested":
+        _mark_confirmed(action, user)
 
     key = f"{action.id}:{days}"
     stmt = (
@@ -117,10 +185,7 @@ async def create_reminder(
         .on_conflict_do_nothing(index_elements=["idempotency_key"])
     )
     await db.execute(stmt)
-    action.status = "confirmed"
-    action.confirmed_by = user.id
-    action.confirmed_at = datetime.now(timezone.utc)
-    action.updated_at = datetime.now(timezone.utc)
+    action.updated_at = _now()
     await db.commit()
     await db.refresh(action)
     return _to_out(action)

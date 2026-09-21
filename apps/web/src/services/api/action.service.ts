@@ -13,6 +13,9 @@ type ApiAction = {
   evidence: string;
   reminder_default: string;
   status: ActionItem["status"];
+  confirmed_by?: string | null;
+  confirmed_at?: string | null;
+  completed_at?: string | null;
 };
 
 function apiError(error: unknown, fallback: string): Error {
@@ -35,6 +38,9 @@ function toAction(row: ApiAction): ActionItem {
     status: row.status,
     actionType: row.action_type,
     evidence: row.evidence,
+    confirmedBy: row.confirmed_by ?? null,
+    confirmedAt: row.confirmed_at ?? null,
+    completedAt: row.completed_at ?? null,
   };
 }
 
@@ -69,7 +75,7 @@ export function toAttentionCard(action: ActionItem): AttentionCard {
 export async function getTimeline(): Promise<TimelineEvent[]> {
   const actions = await getActions();
   return actions
-    .filter((action) => action.dueLabel && action.dueLabel !== "—")
+    .filter((action) => action.status !== "completed" && action.dueLabel && action.dueLabel !== "—")
     .map((action) => ({
       id: action.id,
       dateLabel: action.dueLabel,
@@ -77,20 +83,31 @@ export async function getTimeline(): Promise<TimelineEvent[]> {
     }));
 }
 
-export async function createReminder(actionId: string, reminder: string) {
+async function postAction(path: string, fallback: string, body?: object) {
   try {
-    const { data } = await apiClient.post<ApiAction>(`/actions/${actionId}/reminders`, { reminder });
+    const { data } = await apiClient.post<ApiAction>(path, body);
     return toAction(data);
   } catch (error) {
-    throw apiError(error, "Unable to create reminder.");
+    throw apiError(error, fallback);
   }
 }
 
+export async function confirmAction(actionId: string) {
+  return postAction(`/actions/${actionId}/confirm`, "Unable to confirm action.");
+}
+
+export async function startAction(actionId: string) {
+  return postAction(`/actions/${actionId}/start`, "Unable to start action.");
+}
+
+export async function completeAction(actionId: string) {
+  return postAction(`/actions/${actionId}/complete`, "Unable to complete action.");
+}
+
+export async function createReminder(actionId: string, reminder: string) {
+  return postAction(`/actions/${actionId}/reminders`, "Unable to create reminder.", { reminder });
+}
+
 export async function dismissAction(actionId: string) {
-  try {
-    const { data } = await apiClient.post<ApiAction>(`/actions/${actionId}/dismiss`);
-    return toAction(data);
-  } catch (error) {
-    throw apiError(error, "Unable to dismiss action.");
-  }
+  return postAction(`/actions/${actionId}/dismiss`, "Unable to dismiss action.");
 }

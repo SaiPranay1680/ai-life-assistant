@@ -32,6 +32,21 @@ export type AttentionCard = {
   meta: string;
 };
 
+export type ActionType =
+  | "PAY"
+  | "RENEW"
+  | "REGISTER"
+  | "REVIEW"
+  | "FOLLOW_UP"
+  | "KEEP_FOR_RECORDS";
+
+export type ActionStatus =
+  | "suggested"
+  | "confirmed"
+  | "in_progress"
+  | "completed"
+  | "dismissed";
+
 export type ActionItem = {
   id: string;
   title: string;
@@ -40,9 +55,12 @@ export type ActionItem = {
   priority: Priority;
   reason: string;
   reminderDefault: string;
-  status: "suggested" | "reminder_set" | "dismissed";
-  actionType?: string;
+  status: ActionStatus;
+  actionType?: ActionType | string;
   evidence?: string;
+  confirmedBy?: string | null;
+  confirmedAt?: string | null;
+  completedAt?: string | null;
 };
 
 export type VaultDocument = {

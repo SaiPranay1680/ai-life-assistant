@@ -6,7 +6,7 @@
 - No persistence of uploads, edits, reminders, or chat beyond the browser session (except login keys).
 - Assistant is a lookup table, not RAG.
 - Extraction is a single insurance fixture.
-- Actions page highlights one suggested action, not a full lifecycle manager.
+- Actions page supports full lifecycle (suggested → confirmed → in_progress → completed | dismissed); dismissed actions stay hidden and are not re-suggested.
 - Settings checkboxes and name field do not persist.
 - Delete account is a stub modal.
 - No automated frontend unit/E2E tests in repo.

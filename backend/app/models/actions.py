@@ -24,5 +24,6 @@ class Action(Base):
     requires_confirmation = Column(Boolean, nullable=False, server_default=sa.text("true"))
     confirmed_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
     confirmed_at = Column(TIMESTAMP(timezone=True))
+    completed_at = Column(TIMESTAMP(timezone=True))
     created_at = Column(TIMESTAMP(timezone=True), server_default=sa.text("now()"))
     updated_at = Column(TIMESTAMP(timezone=True), server_default=sa.text("now()"))

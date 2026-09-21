@@ -82,19 +82,17 @@ Status legend: **Live (mock)** = in `apps/web` with fixture data. **Planned** = 
 
 ---
 
-## Actions — Live (one featured card)
+## Actions — Live (lifecycle manager)
 
-**What:** Suggested renewal action with reason, evidence box, reminder select, Create reminder / Not needed.
+**What:** Suggested actions from reviewed documents (PAY, RENEW, REGISTER, REVIEW, FOLLOW_UP, KEEP_FOR_RECORDS) with confirm / start / complete / dismiss and optional reminders.
 
-**User flow:** `/actions` loads action list; UI features the insurance action (`data[1]` fallback `data[0]`).
+**User flow:** `/actions` loads open + completed actions. Suggested cards offer Confirm, Confirm & remind, or Not needed. Confirmed / in-progress rows offer Start, Complete, Dismiss. Completed is read-only. Dismissed stay hidden.
 
-**Business logic:** `createReminder` mock mutation; success message only in UI state.
+**Business logic:** Status machine `suggested → confirmed → in_progress → completed | dismissed`. API stores `confirmed_by`, `confirmed_at`, `completed_at`. Duplicate actions blocked by `(workspace, document, action_type)`.
 
-**Dependencies:** `ActionCard`.
+**Dependencies:** `ActionCard`, `ActionRow`, `action.service.ts`.
 
-**Expected:** Busy state “Saving…”; dismiss message without calling API.
-
-**Planned:** Full list of actions, statuses suggested → confirmed → completed, duplicate detection, audit log, no autonomous payment.
+**Expected:** Invalid transitions return 400; dismissing does not recreate the same suggestion.
 
 ---
 

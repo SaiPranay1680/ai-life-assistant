@@ -38,12 +38,14 @@ Allowed upload types: PDF, JPEG, PNG. Max 20 MB.
 
 ### Actions — `action.service.ts`
 
-| Function | Now | Future |
-| --- | --- | --- |
-| `getActions()` | `actions.json` | `GET /actions` |
-| `getAttentionCards()` | `dashboard.json` attention array | `GET /dashboard` or derived from actions |
-| `getTimeline()` | `timeline.json` | `GET /timeline` |
-| `createReminder(actionId, reminder)` | Echoes status `reminder_set` | `POST /actions/{id}/reminders` |
+| Function | Backend |
+| --- | --- |
+| `getActions()` | `GET /actions` |
+| `confirmAction(id)` | `POST /actions/{id}/confirm` |
+| `startAction(id)` | `POST /actions/{id}/start` |
+| `completeAction(id)` | `POST /actions/{id}/complete` |
+| `dismissAction(id)` | `POST /actions/{id}/dismiss` |
+| `createReminder(actionId, reminder)` | `POST /actions/{id}/reminders` (confirms if still suggested) |
 
 ### Assistant — `assistant.service.ts`
 
@@ -88,12 +90,16 @@ OIDC-first in production. Until then, avoid inventing a custom password API if O
 
 ### Actions / reminders
 
+Statuses: `suggested` → `confirmed` → `in_progress` → `completed` | `dismissed`.
+
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/actions` | List |
-| POST | `/actions/{id}/confirm` | User confirms |
-| POST | `/actions/{id}/dismiss` | Not needed |
-| POST | `/actions/{id}/reminders` | Schedule |
+| GET | `/actions` | List (suggested, confirmed, in_progress, completed; dismissals stay hidden) |
+| POST | `/actions/{id}/confirm` | `suggested` → `confirmed` (stores `confirmed_by`, `confirmed_at`) |
+| POST | `/actions/{id}/start` | `confirmed` → `in_progress` |
+| POST | `/actions/{id}/complete` | `confirmed` or `in_progress` → `completed` (stores `completed_at`) |
+| POST | `/actions/{id}/dismiss` | Not needed (`suggested` / `confirmed` / `in_progress` → `dismissed`) |
+| POST | `/actions/{id}/reminders` | Schedule reminder; also confirms if still `suggested` |
 
 ### Assistant
 

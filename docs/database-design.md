@@ -50,9 +50,12 @@ Matches playbook sketch:
 - `title`, `action_type` (PAY, RENEW, REGISTER, REVIEW, FOLLOW_UP, KEEP_FOR_RECORDS)
 - `due_at`, `priority`, `status`
 - `confidence`, `explanation`, `evidence`
-- `requires_confirmation`, `confirmed_by`, `confirmed_at`
+- `requires_confirmation`, `confirmed_by`, `confirmed_at`, `completed_at`
 
 Statuses: suggested → confirmed → in_progress → completed | dismissed.
+
+Action types: PAY, RENEW, REGISTER, REVIEW, FOLLOW_UP, KEEP_FOR_RECORDS.
+Duplicate prevention: unique `(workspace_id, source_document_id, action_type)`.
 
 ### Reminder
 

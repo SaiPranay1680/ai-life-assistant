@@ -16,7 +16,9 @@ export default function DashboardPage() {
     queryKey: ["actions"],
     queryFn: getActions,
   });
-  const actions = actionsQuery.data ?? [];
+  const actions = (actionsQuery.data ?? []).filter(
+    (item) => item.status === "suggested" || item.status === "confirmed" || item.status === "in_progress",
+  );
   const cards = actions.slice(0, 3).map(toAttentionCard);
 
   return (

@@ -19,6 +19,33 @@ async def list_actions(
     return await service.list_actions(db, user)
 
 
+@router.post("/actions/{action_id}/confirm", response_model=ActionOut)
+async def confirm_action(
+    action_id: UUID,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await service.confirm_action(db, user, action_id)
+
+
+@router.post("/actions/{action_id}/start", response_model=ActionOut)
+async def start_action(
+    action_id: UUID,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await service.start_action(db, user, action_id)
+
+
+@router.post("/actions/{action_id}/complete", response_model=ActionOut)
+async def complete_action(
+    action_id: UUID,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await service.complete_action(db, user, action_id)
+
+
 @router.post("/actions/{action_id}/dismiss", response_model=ActionOut)
 async def dismiss_action(
     action_id: UUID,

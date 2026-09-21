@@ -226,6 +226,9 @@ See Phase 1 Step 6 in [phase-1-decisions.md](./phase-1-decisions.md).
 - [x] REGISTER / REVIEW / FOLLOW_UP / KEEP_FOR_RECORDS from confirmed types
 - [x] Create reminder persists (in-app, no email)
 - [x] Not needed dismisses and does not come back
+- [x] Lifecycle: suggested → confirmed → in_progress → completed | dismissed
+- [x] `confirmed_by` / `confirmed_at` / `completed_at` stored on transitions
+- [x] API + UI controls for confirm / start / complete / dismiss
 
 ---
 

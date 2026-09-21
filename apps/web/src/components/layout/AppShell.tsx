@@ -33,8 +33,8 @@ const titles: Record<string, { title: string; subtitle?: string }> = {
     subtitle: "All your important documents, organized and searchable.",
   },
   "/actions": {
-    title: "Suggested action",
-    subtitle: "We found something that may need your attention.",
+    title: "Actions",
+    subtitle: "Confirm, track, and complete suggested work",
   },
   "/assistant": {
     title: "AI Assistant",
