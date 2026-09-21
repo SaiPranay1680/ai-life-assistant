@@ -1,34 +1,22 @@
 import json
 import re
 import tempfile
-from datetime import date
 from pathlib import Path
-from typing import NamedTuple
 
 import pymupdf
 
-# Currency markers. OCR often misreads ₹ as I / l / 1 glued to digits.
-# Prefer matching explicit "INR " (with a little space) as well as ₹ / Rs.
-_CURRENCY_PREFIX = (
-    r"(?:₹|\u20b9|rs\.?\s*|inr\s+|inr(?=\d)|\$|€|(?<![A-Za-z0-9])[Il1](?=\d))"
+from .text import (
+    AMOUNT_NUMBER,
+    AMOUNT_RE,
+    CURRENCY_PREFIX,
+    DATE_TOKEN,
+    FieldHit,
+    canonicalize_amount_raw,
+    empty_field,
+    normalize_amount,
+    normalize_date,
 )
-_AMOUNT_NUMBER = (
-    r"([0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?"
-    r"|[0-9]+\.[0-9]{2}"
-    r"|[0-9]{4,}(?:\.[0-9]{1,2})?)"
-)
-AMOUNT_RE = re.compile(_CURRENCY_PREFIX + r"?\s*" + _AMOUNT_NUMBER, re.IGNORECASE)
-# Detect OCR/rupee-like prefixes so we can rewrite them to "INR <amount>".
-_RUPEE_LIKE_PREFIX_RE = re.compile(
-    r"^(?:₹|\u20b9|rs\.?\s*|inr\s*|[Il1])(?=\d|\s)",
-    re.IGNORECASE,
-)
-DATE_TOKEN = re.compile(
-    r"(\d{1,2}\s+(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?,?\s+\d{2,4}"
-    r"|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}"
-    r"|\d{4}-\d{2}-\d{2})",
-    re.IGNORECASE,
-)
+
 POLICY_RE = re.compile(
     r"(?:policy|account|invoice|bill|receipt)\s*(?:no\.?|number|#)\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-\/]{4,})",
     re.IGNORECASE,
@@ -79,9 +67,9 @@ PAYMENT_METHOD_RE = re.compile(
 # Item 1: 27-inch Monitor — Qty 1 — ₹24,000  (₹ may OCR as I)
 RECEIPT_ITEM_RE = re.compile(
     r"Item\s*\d+\s*:\s*(.+?)\s*[—\-–]\s*Qty\.?\s*(\d+)\s*[—\-–]\s*"
-    + _CURRENCY_PREFIX
+    + CURRENCY_PREFIX
     + r"?\s*"
-    + _AMOUNT_NUMBER
+    + AMOUNT_NUMBER
     + r"(?:\s*each)?",
     re.IGNORECASE,
 )
@@ -140,53 +128,17 @@ DOCUMENT_TYPE_LABELS = {
 INSURANCE_TYPE_IDS = frozenset({"insurance", "car_insurance", "health_insurance"})
 
 # Accepted values for update_extraction (ids + display labels).
-DOCUMENT_TYPES = DOCUMENT_TYPE_IDS + tuple(DOCUMENT_TYPE_LABELS.values())
+DOCUMENT_TYPES = DOCUMENT_TYPE_IDS + tuple(DOCUMENT_TYPE_LABELS.values()) + ("Other",)
 
-MONTHS = {
-    "jan": 1,
-    "january": 1,
-    "feb": 2,
-    "february": 2,
-    "mar": 3,
-    "march": 3,
-    "apr": 4,
-    "april": 4,
-    "may": 5,
-    "jun": 6,
-    "june": 6,
-    "jul": 7,
-    "july": 7,
-    "aug": 8,
-    "august": 8,
-    "sep": 9,
-    "sept": 9,
-    "september": 9,
-    "oct": 10,
-    "october": 10,
-    "nov": 11,
-    "november": 11,
-    "dec": 12,
-    "december": 12,
-}
-
+OCR_DPI = 220
 _ocr = None
-
-
-class FieldHit(NamedTuple):
-    raw: str
-    normalized: str
-    confidence: float
-    evidence: str
-    page: int
-
-
-def empty_field(page: int = 1) -> FieldHit:
-    return FieldHit("", "", 0.0, "", page)
 
 
 def display_document_type(doc_type: str) -> str:
     """Map machine id (or legacy label) to the frontend display label."""
     key = normalize_document_type(doc_type)
+    if (doc_type or "").strip() == "Other":
+        return "Other"
     return DOCUMENT_TYPE_LABELS.get(key, doc_type or DOCUMENT_TYPE_LABELS["generic"])
 
 
@@ -194,6 +146,8 @@ def normalize_document_type(value: str | None) -> str:
     """Normalize free-text / legacy labels to a stable DOCUMENT_TYPE_ID."""
     text = (value or "").strip()
     if not text:
+        return "generic"
+    if text == "Other":
         return "generic"
     lowered = text.lower().replace("-", "_").replace(" ", "_")
     if lowered in DOCUMENT_TYPE_IDS:
@@ -217,7 +171,7 @@ def normalize_document_type(value: str | None) -> str:
         return "purchase_receipt"
     if "utility" in lowered or lowered == "bill" or "bill" in lowered:
         return "utility_bill"
-    if "important" in lowered or "generic" in lowered:
+    if "important" in lowered or "generic" in lowered or lowered == "other":
         return "generic"
     return "generic"
 
@@ -262,9 +216,23 @@ def _ocr_engine():
     return _ocr
 
 
+
+def inspect_pdf(path: Path) -> tuple[int, bool]:
+    document = pymupdf.open(path)
+    try:
+        encrypted = bool(getattr(document, "is_encrypted", False))
+        if encrypted and not document.authenticate(""):
+            return int(document.page_count), True
+        return int(document.page_count), False
+    finally:
+        document.close()
+
+
 def extract_pdf_pages(path: Path) -> list[tuple[int, str]]:
     document = pymupdf.open(path)
     try:
+        if getattr(document, "is_encrypted", False) and not document.authenticate(""):
+            raise ValueError("This PDF is password protected.")
         return [(index, page.get_text() or "") for index, page in enumerate(document, start=1)]
     finally:
         document.close()
@@ -292,7 +260,7 @@ def ocr_pdf_pages(path: Path) -> list[tuple[int, str]]:
     parts: list[tuple[int, str]] = []
     try:
         for index, page in enumerate(document, start=1):
-            pix = page.get_pixmap(dpi=140)
+            pix = page.get_pixmap(dpi=OCR_DPI)
             tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
             tmp.close()
             tmp_path = Path(tmp.name)
@@ -314,91 +282,6 @@ def read_document_pages(path: Path, is_pdf: bool) -> list[tuple[int, str]]:
     if len(text.strip()) < 40:
         return ocr_pdf_pages(path)
     return pages
-
-
-def _year(value: str) -> int:
-    year = int(value)
-    if year < 100:
-        return 2000 + year
-    return year
-
-
-def normalize_date(raw: str) -> str:
-    text = (raw or "").strip()
-    if not text:
-        return ""
-    iso = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", text)
-    if iso:
-        try:
-            return date(int(iso.group(1)), int(iso.group(2)), int(iso.group(3))).isoformat()
-        except ValueError:
-            return ""
-    named = re.fullmatch(
-        r"(\d{1,2})\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?,?\s+(\d{2,4})",
-        text,
-        flags=re.IGNORECASE,
-    )
-    if named:
-        month = MONTHS[named.group(2).lower().rstrip(".")]
-        try:
-            return date(_year(named.group(3)), month, int(named.group(1))).isoformat()
-        except ValueError:
-            return ""
-    numeric = re.fullmatch(r"(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})", text)
-    if numeric:
-        try:
-            return date(_year(numeric.group(3)), int(numeric.group(2)), int(numeric.group(1))).isoformat()
-        except ValueError:
-            return ""
-    return ""
-
-
-def canonicalize_amount_raw(raw: str) -> str:
-    """
-    Rewrite rupee / OCR currency prefixes to a stable display form: 'INR <amount>'.
-
-    Examples:
-      I42,000.00  → INR 42,000.00
-      ₹7,560.00   → INR 7,560.00
-      INR42000    → INR 42000
-      INR 49560   → INR 49560
-    """
-    text = (raw or "").strip()
-    if not text:
-        return ""
-    match = AMOUNT_RE.search(text)
-    if not match:
-        return text
-    number_token = match.group(1)
-    head = text[: match.start(1)]
-    if _RUPEE_LIKE_PREFIX_RE.search(head) or _RUPEE_LIKE_PREFIX_RE.match(text):
-        return f"INR {number_token}"
-    # Already had an explicit non-INR currency (USD/EUR/$/€) — keep original match.
-    if re.search(r"(?:\$|€|usd|eur)", head, flags=re.IGNORECASE):
-        return match.group(0).strip()
-    # Bare number matched with no prefix — leave as-is.
-    if not head.strip():
-        return number_token
-    return f"INR {number_token}"
-
-
-def normalize_amount(raw: str) -> str:
-    """Normalize money strings to a plain number; tolerate OCR ₹→I/l/1 and 'INR '."""
-    cleaned = (raw or "").strip()
-    cleaned = re.sub(
-        r"^(?:₹|\u20b9|rs\.?\s*|inr\s*|\$|€|[Il1])\s*",
-        "",
-        cleaned,
-        flags=re.IGNORECASE,
-    )
-    cleaned = cleaned.replace(",", "")
-    match = re.search(r"\d+(?:\.\d{1,2})?", cleaned)
-    if not match:
-        return ""
-    value = match.group(0)
-    if re.fullmatch(r"\d+\.0{1,2}", value):
-        return value.split(".", 1)[0]
-    return value
 
 
 def _amount_hit(raw_match: str, confidence: float, evidence: str, page: int) -> FieldHit:

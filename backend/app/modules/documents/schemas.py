@@ -20,6 +20,10 @@ class DocumentOut(BaseModel):
     document_type: str | None
     processing_status: str
     important_date: str | None = None
+    purpose_status: str | None = None
+    purpose_reason: str | None = None
+    purpose_category: str | None = None
+    page_count: int | None = None
     created_at: datetime | None
 
     model_config = {"from_attributes": True}
@@ -152,6 +156,18 @@ StructuredExtraction = (
 )
 
 
+class PurposeDecisionIn(BaseModel):
+    decision: str
+
+
+class ExtractedFieldOut(BaseModel):
+    name: str
+    value: str
+    evidence: str
+    page: int
+    confidence: float
+
+
 class ExtractionOut(BaseModel):
     documentType: str
     provider: str
@@ -163,3 +179,7 @@ class ExtractionOut(BaseModel):
     previewLines: list[str]
     processingStatus: str
     structuredExtraction: dict[str, Any] | None = None
+    purposeStatus: str = ""
+    purposeReason: str = ""
+    purposeCategory: str = ""
+    fields: list[ExtractedFieldOut] = []

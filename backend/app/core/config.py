@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     quarantine_dir: str = str(BACKEND_DIR / "quarantine")
     quarantine_ttl_seconds: int = 3600
     max_upload_bytes: int = 20 * 1024 * 1024
+    max_image_upload_bytes: int = 10 * 1024 * 1024
+    max_pdf_pages: int = 30
+    max_workspace_documents: int = 50
+    max_workspace_bytes: int = 500 * 1024 * 1024
     redis_url: str = "redis://localhost:6379/0"
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/1"

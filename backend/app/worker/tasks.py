@@ -34,7 +34,14 @@ async def _run(document_id: str) -> str:
             if document is None:
                 return "missing"
 
-            if document.processing_status in ("ready_for_review", "reviewed", "failed"):
+            if document.processing_status in (
+                "ready_for_review",
+                "reviewed",
+                "failed",
+                "needs_decision",
+                "rejected",
+                "discarded",
+            ):
                 return document.processing_status
 
             document.processing_status = "processing"

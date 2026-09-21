@@ -4,7 +4,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { getExtraction, updateExtraction } from "@/services/api/document.service";
+import { decideDocumentPurpose, getExtraction, updateExtraction } from "@/services/api/document.service";
 import type { ExtractedFields, ExtractedValue } from "@/types";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -180,6 +180,60 @@ function ReviewForm({ data, documentId }: { data: ExtractedFields; documentId: s
     } finally {
       setSaving(false);
     }
+  }
+
+  async function decide(decision: "keep" | "discard") {
+    setError(null);
+    setSaving(true);
+    try {
+      await decideDocumentPurpose(documentId, decision);
+      router.push(decision === "keep" ? "/actions" : "/documents/upload");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to save that choice.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const rejected =
+    data.processingStatus === "rejected" ||
+    data.purposeStatus === "rejected" ||
+    data.purposeStatus === "not_useful";
+  const needsDecision = data.processingStatus === "needs_decision";
+
+  if (rejected) {
+    return (
+      <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8">
+        <h2 className="text-lg font-semibold text-slate-900">Document not stored</h2>
+        <p className="mt-3 text-sm leading-6 text-slate-600">
+          {data.purposeReason || "This file is not a bill, policy, invoice, or important record."}
+        </p>
+        <div className="mt-6">
+          <Button onClick={() => router.push("/documents/upload")}>Upload another document</Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (needsDecision) {
+    return (
+      <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8">
+        <p className="text-xs font-medium tracking-wide text-slate-400 uppercase">{data.previewTitle}</p>
+        <h2 className="mt-2 text-lg font-semibold text-slate-900">Keep this file?</h2>
+        <p className="mt-3 text-sm leading-6 text-slate-600">
+          {data.purposeReason || "This does not look like a bill, insurance policy, invoice, or warranty."}
+        </p>
+        <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <Button variant="ghost" onClick={() => void decide("discard")} disabled={saving}>
+            Don’t store
+          </Button>
+          <Button onClick={() => void decide("keep")} disabled={saving}>
+            {saving ? "Saving…" : "Keep as a record"}
+          </Button>
+        </div>
+        {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
+      </div>
+    );
   }
 
   return (

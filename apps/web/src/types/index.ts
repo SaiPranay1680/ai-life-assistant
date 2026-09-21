@@ -7,7 +7,8 @@ export type DocumentType =
   | "Health Insurance"
   | "Purchase"
   | "Warranty"
-  | "Important document";
+  | "Important document"
+  | "Other";
 
 export type DocumentStatus =
   | "Action created"
@@ -16,7 +17,9 @@ export type DocumentStatus =
   | "No action"
   | "Processing"
   | "Needs review"
-  | "Reviewed";
+  | "Reviewed"
+  | "Rejected"
+  | "Decide";
 
 export type User = {
   id: string;
@@ -100,6 +103,14 @@ export type StructuredExtraction = {
   [key: string]: ExtractedValue | ExtractedValue[] | null | undefined;
 };
 
+export type ExtractedField = {
+  name: string;
+  value: string;
+  evidence: string;
+  page: number;
+  confidence: number;
+};
+
 export type ExtractedFields = {
   documentType: string;
   provider: string;
@@ -111,4 +122,8 @@ export type ExtractedFields = {
   previewLines: string[];
   processingStatus?: string;
   structuredExtraction?: StructuredExtraction | null;
+  purposeStatus?: string;
+  purposeReason?: string;
+  purposeCategory?: string;
+  fields?: ExtractedField[];
 };

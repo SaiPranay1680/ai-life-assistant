@@ -4,7 +4,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.config import settings
@@ -14,6 +14,8 @@ from ...models.extraction import ExtractionField
 from ...security.scanner import ScannerUnavailable, get_scanner
 from ...storage.factory import get_storage
 from ..auth.deps import CurrentUser
+from ..intelligence.provider import get_provider
+from ..intelligence.types import NormalizedDocument
 from .extract import (
     DOCUMENT_TYPES,
     FieldHit,
@@ -21,13 +23,13 @@ from .extract import (
     display_document_type,
     empty_field,
     guess_fields,
-    normalize_amount,
-    normalize_date,
+    inspect_pdf,
     normalize_document_type,
     read_document_pages,
     schema_document_type,
 )
-from .schemas import DocumentOut, ExtractionOut, ExtractionUpdate, UploadResponse
+from .text import normalize_amount, normalize_date
+from .schemas import DocumentOut, ExtractedFieldOut, ExtractionOut, ExtractionUpdate, UploadResponse
 from .validation import detect_mime, safe_filename, validate_extension, validate_extraction, validate_file_type
 
 # Prefer these ExtractionField names when resolving list/detail important dates.
@@ -41,8 +43,28 @@ _IMPORTANT_DATE_FIELDS = (
     "document_date",
     "transaction_date",
 )
-
 CHUNK_SIZE = 1024 * 1024
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
+
+
+async def _assert_workspace_quota(db: AsyncSession, workspace_id: UUID, extra_bytes: int) -> None:
+    active = Document.processing_status.notin_(("rejected", "discarded"))
+    count = await db.scalar(
+        select(func.count()).select_from(Document).where(Document.workspace_id == workspace_id, active)
+    )
+    if (count or 0) >= settings.max_workspace_documents:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"This workspace already has {settings.max_workspace_documents} documents. Delete unused files first.",
+        )
+    used = await db.scalar(
+        select(func.coalesce(func.sum(Document.file_size), 0)).where(Document.workspace_id == workspace_id, active)
+    )
+    if (used or 0) + extra_bytes > settings.max_workspace_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="This workspace is out of storage. Delete old documents and try again.",
+        )
 
 # Left-panel preview safety caps (normal documents are far smaller).
 _PREVIEW_MAX_LINES = 500
@@ -73,6 +95,10 @@ def _to_out(document: Document, important_date: str | None = None) -> DocumentOu
         document_type=document.document_type,
         processing_status=document.processing_status or "uploaded",
         important_date=important_date,
+        purpose_status=document.purpose_status,
+        purpose_reason=document.purpose_reason,
+        purpose_category=document.purpose_category,
+        page_count=document.page_count,
         created_at=document.created_at,
     )
 
@@ -172,10 +198,11 @@ async def upload_document(
             if not chunk:
                 break
             total_size += len(chunk)
-            if total_size > settings.max_upload_bytes:
+            limit = settings.max_image_upload_bytes if extension in IMAGE_EXTENSIONS else settings.max_upload_bytes
+            if total_size > limit:
                 raise HTTPException(
                     status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                    detail="File must be 20 MB or smaller.",
+                    detail="Images must be 10 MB or smaller." if extension in IMAGE_EXTENSIONS else "File must be 20 MB or smaller.",
                 )
             if len(first_bytes) < 16:
                 first_bytes += chunk[:16]
@@ -197,6 +224,12 @@ async def upload_document(
     if total_size == 0:
         await reject_quarantine()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File is empty.")
+
+    try:
+        await _assert_workspace_quota(db, user.workspace_id, total_size)
+    except HTTPException:
+        await reject_quarantine()
+        raise
 
     detected_mime = detect_mime(first_bytes)
     try:
@@ -260,6 +293,27 @@ async def upload_document(
         await db.commit()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This file failed the security scan.")
 
+    page_count = 1
+    if extension == ".pdf":
+        try:
+            async with storage.open_for_read(relative_key, location="quarantine") as quarantine_path:
+                page_count, encrypted = inspect_pdf(quarantine_path)
+        except Exception:
+            await reject_quarantine()
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This PDF could not be read.") from None
+        if encrypted:
+            await reject_quarantine()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This PDF is password protected. Remove the password and upload again.",
+            )
+        if page_count > settings.max_pdf_pages:
+            await reject_quarantine()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"This file has {page_count} pages. Upload a single bill or policy (up to {settings.max_pdf_pages} pages).",
+            )
+
     try:
         await storage.promote(relative_key)
     except Exception:
@@ -280,6 +334,7 @@ async def upload_document(
         storage_key=relative_key.replace("\\", "/"),
         scan_status="clean",
         processing_status="queued",
+        page_count=page_count,
     )
     db.add(document)
     try:
@@ -307,6 +362,40 @@ async def upload_document(
 
 def _field_map(rows: list[ExtractionField]) -> dict[str, str]:
     return {row.field_name: (row.raw_value or row.normalized_value or "") for row in rows}
+
+
+def _preview_hit(text: str, pages: list[tuple[int, str]], reason: str = "") -> FieldHit:
+    lines = [line.strip() for line in text.splitlines() if line.strip()][:8]
+    if reason:
+        lines = [reason] + lines[:7]
+    if not lines:
+        lines = [reason or "No text extracted yet."]
+    return FieldHit(
+        "\n".join(lines),
+        "",
+        0.8,
+        lines[0][:200],
+        pages[0][0] if pages else 1,
+    )
+
+
+def _empty_supported_fields(document_type: str) -> dict[str, FieldHit]:
+    return {
+        "documentType": FieldHit(document_type, document_type, 0.2, "", 1),
+        "provider": empty_field(),
+        "policyNumber": empty_field(),
+        "startDate": empty_field(),
+        "expiryDate": empty_field(),
+        "premium": empty_field(),
+    }
+
+
+async def _clear_stored_file(document: Document) -> None:
+    if not document.storage_key:
+        return
+    await get_storage().delete_permanent(document.storage_key)
+    document.storage_key = None
+    document.file_size = 0
 
 
 async def process_document_pipeline(db: AsyncSession, document: Document) -> None:
@@ -337,49 +426,52 @@ async def process_document_pipeline(db: AsyncSession, document: Document) -> Non
         return
 
     text = "\n".join(part for _, part in pages)
-
-    if len(text.strip()) < 8:
-        document.processing_status = "failed"
-        document.document_type = "generic"
-        failed_fields = {
-            "documentType": FieldHit("generic", "generic", 0.2, "", 1),
-            "provider": empty_field(),
-            "policyNumber": empty_field(),
-            "startDate": empty_field(),
-            "expiryDate": empty_field(),
-            "premium": empty_field(),
-            "preview": FieldHit("Could not read text from this file.", "", 0.2, "", 1),
-        }
-        await _replace_fields(db, document, failed_fields)
-        await db.commit()
-        return
-
-    fields = guess_fields(pages)
-    doc_type = normalize_document_type(fields["documentType"].raw)
-    document.document_type = doc_type
-    fields["documentType"] = FieldHit(doc_type, doc_type, fields["documentType"].confidence, "", 1)
-
-    structured_payload = build_structured_payload(doc_type, fields)
-    try:
-        validated = validate_extraction(doc_type, structured_payload)
-        # Keep validated shape available for persistence of complex nulls if needed later.
-        _ = validated
-    except ValueError:
-        # Validation failure should not invent data; mark failed and keep whatever we have.
-        document.processing_status = "failed"
-        await _replace_fields(db, document, fields)
-        await db.commit()
-        return
-
-    document.processing_status = "ready_for_review"
-    preview_lines = [line.strip() for line in text.splitlines() if line.strip()][:20]
-    fields["preview"] = FieldHit(
-        "\n".join(preview_lines),
-        "",
-        0.8,
-        preview_lines[0] if preview_lines else "",
-        pages[0][0] if pages else 1,
+    document.page_count = document.page_count or len(pages) or 1
+    normalized = NormalizedDocument(
+        pages=pages or [(1, "")],
+        is_pdf=is_pdf,
+        is_image=not is_pdf,
+        page_count=document.page_count,
+        filename=document.original_filename or "",
     )
+    decision = get_provider().classify(normalized)
+    document.purpose_status = decision.status
+    document.purpose_category = decision.category
+    document.purpose_subtype = decision.subtype
+    document.purpose_reason = decision.reason
+    document.purpose_confidence = decision.confidence
+    document.document_type = decision.document_type
+
+    if decision.status in ("rejected", "not_useful"):
+        fields = _empty_supported_fields("Other")
+        fields["preview"] = _preview_hit(text, pages, decision.reason)
+        await _replace_fields(db, document, fields)
+        document.processing_status = "rejected"
+        await _clear_stored_file(document)
+        await db.commit()
+        return
+
+    if decision.status == "supported":
+        # DOC-005 type-specific extractors (utility/insurance/purchase/warranty).
+        fields = guess_fields(pages)
+        doc_type = normalize_document_type(fields["documentType"].raw)
+        document.document_type = doc_type
+        fields["documentType"] = FieldHit(doc_type, doc_type, fields["documentType"].confidence, "", 1)
+        structured_payload = build_structured_payload(doc_type, fields)
+        try:
+            validate_extraction(doc_type, structured_payload)
+        except ValueError:
+            document.processing_status = "failed"
+            await _replace_fields(db, document, fields)
+            await db.commit()
+            return
+        fields["preview"] = _preview_hit(text, pages, "")
+        document.processing_status = "ready_for_review"
+    else:
+        schema_name = "Other"
+        fields = get_provider().extract(normalized, schema_name)
+        fields["preview"] = _preview_hit(text, pages, decision.reason)
+        document.processing_status = "needs_decision"
     await _replace_fields(db, document, fields)
     await db.commit()
 
@@ -449,6 +541,8 @@ async def get_extraction(db: AsyncSession, user: CurrentUser, document_id: UUID)
     type_id = normalize_document_type(raw_type)
     # Frontend review form still shows familiar labels for the document type dropdown.
     display_type = display_document_type(type_id)
+    if (document.document_type or "").strip() == "Other" or (raw_type or "").strip() == "Other":
+        display_type = "Other"
 
     structured = None
     try:
@@ -459,6 +553,26 @@ async def get_extraction(db: AsyncSession, user: CurrentUser, document_id: UUID)
         structured = validate_extraction(type_id, payload).model_dump(mode="json")
     except ValueError:
         structured = None
+
+    evidence_fields = [
+        ExtractedFieldOut(
+            name=row.field_name,
+            value=(row.raw_value or row.normalized_value or ""),
+            evidence=row.evidence_snippet or "",
+            page=row.page_number or 1,
+            confidence=float(row.confidence or 0),
+        )
+        for row in field_rows
+        if row.field_name not in {"preview", "documentType"}
+    ]
+
+    purpose_kwargs = {
+        "purposeStatus": document.purpose_status or "",
+        "purposeReason": document.purpose_reason or "",
+        "purposeCategory": document.purpose_category or "",
+        "fields": evidence_fields,
+        "structuredExtraction": structured,
+    }
 
     # Flat insurance-shaped fields stay for older clients; type-specific docs must not
     # leak into policyNumber / startDate / expiryDate / premium.
@@ -494,7 +608,7 @@ async def get_extraction(db: AsyncSession, user: CurrentUser, document_id: UUID)
             previewTitle=document.original_filename or "Document",
             previewLines=preview_lines,
             processingStatus=document.processing_status or "uploaded",
-            structuredExtraction=structured,
+            **purpose_kwargs,
         )
 
     return ExtractionOut(
@@ -507,9 +621,8 @@ async def get_extraction(db: AsyncSession, user: CurrentUser, document_id: UUID)
         previewTitle=document.original_filename or "Document",
         previewLines=preview_lines,
         processingStatus=document.processing_status or "uploaded",
-        structuredExtraction=structured,
+        **purpose_kwargs,
     )
-
 
 async def update_extraction(
     db: AsyncSession,
@@ -531,10 +644,15 @@ async def update_extraction(
             status_code=status.HTTP_409_CONFLICT,
             detail="Document is still processing. Try again when review is ready.",
         )
-    if document.processing_status == "failed":
+    if document.processing_status == "needs_decision":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Decide whether to keep this file before confirming extracted fields.",
+        )
+    if document.processing_status in ("failed", "rejected"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This document could not be processed.",
+            detail=document.purpose_reason or "This document could not be processed.",
         )
 
     doc_type_input = payload.documentType.strip()
@@ -748,6 +866,56 @@ async def update_extraction(
 
     await _replace_fields(db, document, fields)
     document.document_type = type_id
+    document.processing_status = "reviewed"
+    await db.commit()
+    return await get_extraction(db, user, document_id)
+
+
+async def decide_purpose(
+    db: AsyncSession,
+    user: CurrentUser,
+    document_id: UUID,
+    decision: str,
+) -> ExtractionOut:
+    choice = decision.strip().lower()
+    if choice not in {"keep", "discard"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Choose keep or discard.")
+
+    result = await db.execute(
+        select(Document).where(
+            Document.id == document_id,
+            Document.workspace_id == user.workspace_id,
+        )
+    )
+    document = result.scalar_one_or_none()
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+    if document.processing_status != "needs_decision":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This document does not need a keep-or-discard decision.",
+        )
+    if choice == "discard":
+        await delete_document(db, user, document_id)
+        return ExtractionOut(
+            documentType="Other",
+            provider="",
+            policyNumber="",
+            startDate="",
+            expiryDate="",
+            premium="",
+            previewTitle="Discarded",
+            previewLines=["This file was not stored."],
+            processingStatus="discarded",
+            purposeStatus="unknown",
+            purposeReason="The user chose not to store this file.",
+            purposeCategory="other",
+            fields=[],
+            structuredExtraction=None,
+        )
+
+    document.document_type = "Other"
+    document.purpose_status = "unknown"
     document.processing_status = "reviewed"
     await db.commit()
     return await get_extraction(db, user, document_id)

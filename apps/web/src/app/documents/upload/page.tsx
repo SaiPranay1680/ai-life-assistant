@@ -41,12 +41,12 @@ export default function UploadPage() {
         <Badge tone="info">Bills</Badge>
         <Badge tone="warning">Insurance</Badge>
         <Badge tone="success">Warranty</Badge>
-        <span className="text-sm text-slate-500">Important documents</span>
+        <span className="text-sm text-slate-500">Important records</span>
       </div>
       <NotificationCard
         className="mt-6"
-        title="Private by design"
-        body="Your document is processed only inside your workspace. Important extracted information will be shown to you for confirmation."
+        title="Bills, policies, and records — not a gallery"
+        body="Upload a bill, insurance policy, invoice, warranty, or important record. Family photos, newspapers, and random files are not stored. Unknown documents will ask you before they are kept."
       />
     </AppShell>
   );

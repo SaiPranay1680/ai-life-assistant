@@ -11,7 +11,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect } from "react";
 
 const pendingStatuses = new Set(["uploaded", "queued", "processing", "ocr_required"]);
-const reviewStatuses = new Set(["ready_for_review", "reviewed", "needs_review"]);
+const reviewStatuses = new Set(["ready_for_review", "reviewed", "needs_review", "needs_decision"]);
 
 function ProcessingContent() {
   const params = useSearchParams();
@@ -40,7 +40,8 @@ function ProcessingContent() {
   }, [reviewReady, user, documentId, queryClient, router]);
 
   const failed = status === "failed";
-  const unknownStatus = Boolean(status && !pendingStatuses.has(status) && !reviewReady && !failed);
+  const rejected = status === "rejected";
+  const unknownStatus = Boolean(status && !pendingStatuses.has(status) && !reviewReady && !failed && !rejected);
   const processing = status === "processing" || status === "ocr_required";
   const steps: ProcessStep[] = [
     { title: "Document uploaded and checked", status: "complete" },
@@ -67,6 +68,15 @@ function ProcessingContent() {
         <p role="alert" className="mt-4 text-sm text-rose-600">
           We could not process this document. You can view or delete the uploaded file in your document vault, then upload a clearer copy.
         </p>
+      ) : rejected ? (
+        <div role="alert" className="mt-4 space-y-4">
+          <p className="text-sm text-rose-600">
+            {query.data?.purpose_reason || "This file is not a bill, policy, or record we can store."}
+          </p>
+          <Link href="/documents/upload" className="text-sm font-medium text-blue-600 hover:underline">
+            Upload a supported document
+          </Link>
+        </div>
       ) : unknownStatus ? (
         <p role="alert" className="mt-4 text-sm text-amber-700">This document has an unexpected processing status. Check it in your document vault.</p>
       ) : !query.data ? (
@@ -86,7 +96,7 @@ function ProcessingContent() {
       )}
       <div className="mt-6 flex gap-4 text-sm font-medium text-blue-600">
         <Link href="/documents" className="hover:underline">Go to document vault</Link>
-        {!documentId || failed ? <Link href="/documents/upload" className="hover:underline">Upload a document</Link> : null}
+        {!documentId || failed || rejected ? <Link href="/documents/upload" className="hover:underline">Upload a document</Link> : null}
       </div>
     </div>
   );
