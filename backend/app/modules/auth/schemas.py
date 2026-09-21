@@ -25,13 +25,33 @@ class LoginRequest(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
-    email: EmailStr
+    reset_token: str = Field(min_length=20)
     new_password: str = Field(min_length=6, max_length=72)
     confirm_password: str = Field(min_length=6, max_length=72)
 
 
 class ResetPasswordResponse(BaseModel):
     message: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class MessageResponse(BaseModel):
+    message: str
+    expires_in_seconds: int | None = None
+    cooldown_seconds: int | None = None
+
+
+class VerifyOtpRequest(BaseModel):
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+class VerifyResetOtpResponse(BaseModel):
+    message: str
+    reset_token: str
 
 
 class WorkspaceOut(BaseModel):
@@ -44,6 +64,7 @@ class UserOut(BaseModel):
     email: str
     name: str
     role: str = "user"
+    email_verified: bool = False
     workspace: WorkspaceOut
 
 

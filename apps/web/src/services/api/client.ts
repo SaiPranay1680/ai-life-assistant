@@ -23,6 +23,8 @@ apiClient.interceptors.response.use(
       const isAuthForm =
         url.includes("/auth/login") ||
         url.includes("/auth/register") ||
+        url.includes("/auth/forgot-password") ||
+        url.includes("/auth/verify-reset-otp") ||
         url.includes("/auth/reset-password");
       if (!isAuthForm) {
         window.localStorage.removeItem("ala-auth-user");

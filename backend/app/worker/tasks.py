@@ -61,3 +61,21 @@ def cleanup_quarantine_task() -> int:
 
 async def _cleanup_quarantine() -> int:
     return await get_storage().cleanup_orphans(settings.quarantine_ttl_seconds)
+
+
+@celery_app.task(
+    name="email.send_message",
+    bind=True,
+    ignore_result=True,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_kwargs={"max_retries": 3},
+)
+def send_email_task(self, kind: str, to_email: str, context: dict) -> str:
+    from app.services.email import EmailNotConfigured, send_email
+
+    try:
+        send_email(kind=kind, to_email=to_email, context=context)
+    except EmailNotConfigured:
+        return "skipped"
+    return "sent"

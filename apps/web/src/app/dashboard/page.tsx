@@ -5,17 +5,32 @@ import { AttentionCard } from "@/components/cards/AttentionCard";
 import { ActionRow } from "@/components/cards/ActionCard";
 import { Button } from "@/components/ui/Button";
 import { getActions, toAttentionCard } from "@/services/api/action.service";
+import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { user, refreshUser } = useAuth();
   const actionsQuery = useQuery({
     queryKey: ["actions"],
     queryFn: getActions,
   });
+  const meQuery = useQuery({
+    queryKey: ["me"],
+    queryFn: refreshUser,
+  });
+
+  useEffect(() => {
+    void meQuery.refetch();
+    // Load verification status from the API once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const verified = Boolean(meQuery.data?.emailVerified ?? user?.emailVerified);
   const actions = (actionsQuery.data ?? []).filter(
     (item) => item.status === "suggested" || item.status === "confirmed" || item.status === "in_progress",
   );
@@ -38,6 +53,25 @@ export default function DashboardPage() {
           {actionsQuery.error instanceof Error ? actionsQuery.error.message : "Could not load actions."}
         </p>
       ) : null}
+      <section
+        className={`mb-6 rounded-2xl border p-4 ${
+          verified ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"
+        }`}
+      >
+        {verified ? (
+          <p className="text-sm font-semibold text-emerald-800">Account Verified</p>
+        ) : (
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-amber-900">Account Not Verified</p>
+              <p className="text-sm text-amber-800">Verify your email to keep your account secure.</p>
+            </div>
+            <Button type="button" onClick={() => router.push("/verify-account")}>
+              Verify Account
+            </Button>
+          </div>
+        )}
+      </section>
       <section className="grid gap-4 md:grid-cols-3">
         {cards.map((card) => (
           <AttentionCard key={card.id} card={card} />

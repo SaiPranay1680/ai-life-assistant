@@ -10,13 +10,13 @@ import {
   type ReactNode,
 } from "react";
 import {
+  getMe,
   getSessionExpiresAtMs,
   getStoredUser,
   isSessionExpired,
   login as loginRequest,
   logout as logoutRequest,
   register as registerRequest,
-  resetPassword as resetPasswordRequest,
 } from "@/services/api/auth.service";
 import type { User } from "@/types";
 
@@ -25,8 +25,8 @@ type AuthContextValue = {
   ready: boolean;
   login: (email: string, password: string) => Promise<User>;
   register: (email: string, password: string, name?: string) => Promise<User>;
-  resetPassword: (email: string, newPassword: string, confirmPassword: string) => Promise<string>;
   logout: () => void;
+  refreshUser: () => Promise<User | null>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -86,16 +86,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return nextUser;
   }, []);
 
-  const resetPassword = useCallback(
-    async (email: string, newPassword: string, confirmPassword: string) => {
-      return resetPasswordRequest(email, newPassword, confirmPassword);
-    },
-    [],
-  );
+  const refreshUser = useCallback(async (): Promise<User | null> => {
+    try {
+      const nextUser = await getMe();
+      setUser(nextUser);
+      return nextUser;
+    } catch {
+      return user;
+    }
+  }, [user]);
 
   const value = useMemo(
-    () => ({ user, ready, login, register, resetPassword, logout }),
-    [user, ready, login, register, resetPassword, logout],
+    () => ({ user, ready, login, register, logout, refreshUser }),
+    [user, ready, login, register, logout, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

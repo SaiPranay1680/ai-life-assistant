@@ -11,7 +11,7 @@ type Workspace = {
   name: string;
 };
 
-type AuthUser = User & { workspace: Workspace };
+type AuthUser = User & { workspace: Workspace; email_verified?: boolean };
 
 type AuthResponse = {
   access_token: string;
@@ -19,9 +19,32 @@ type AuthResponse = {
   user: AuthUser;
 };
 
+type MessageResponse = {
+  message: string;
+  expires_in_seconds?: number | null;
+  cooldown_seconds?: number | null;
+};
+
+type VerifyResetOtpResponse = {
+  message: string;
+  reset_token: string;
+};
+
 type ResetPasswordResponse = {
   message: string;
 };
+
+type MeResponse = AuthUser;
+
+function toUser(user: AuthUser): User {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role === "admin" ? "admin" : "user",
+    emailVerified: Boolean(user.email_verified),
+  };
+}
 
 function apiError(error: unknown, fallback = "Unable to sign in."): Error {
   if (axios.isAxiosError(error)) {
@@ -35,12 +58,7 @@ function apiError(error: unknown, fallback = "Unable to sign in."): Error {
 }
 
 function persistSession(response: AuthResponse): User {
-  const user: User = {
-    id: response.user.id,
-    name: response.user.name,
-    email: response.user.email,
-    role: response.user.role === "admin" ? "admin" : "user",
-  };
+  const user = toUser(response.user);
   window.localStorage.setItem(AUTH_KEY, JSON.stringify(user));
   window.localStorage.setItem(TOKEN_KEY, response.access_token);
   window.localStorage.setItem(WORKSPACE_KEY, response.user.workspace.id);
@@ -103,20 +121,63 @@ export async function register(email: string, password: string, name?: string): 
   }
 }
 
-export async function resetPassword(
-  email: string,
-  newPassword: string,
-  confirmPassword: string,
-): Promise<string> {
+export async function requestPasswordReset(email: string): Promise<MessageResponse> {
+  try {
+    const { data } = await apiClient.post<MessageResponse>("/auth/forgot-password", { email });
+    return data;
+  } catch (error) {
+    throw apiError(error, "Unable to send a password reset code.");
+  }
+}
+
+export async function verifyResetOtp(email: string, otp: string): Promise<VerifyResetOtpResponse> {
+  try {
+    const { data } = await apiClient.post<VerifyResetOtpResponse>("/auth/verify-reset-otp", { email, otp });
+    return data;
+  } catch (error) {
+    throw apiError(error, "Unable to verify that code.");
+  }
+}
+
+export async function resetPassword(resetToken: string, newPassword: string, confirmPassword: string): Promise<string> {
   try {
     const { data } = await apiClient.post<ResetPasswordResponse>("/auth/reset-password", {
-      email,
+      reset_token: resetToken,
       new_password: newPassword,
       confirm_password: confirmPassword,
     });
     return data.message;
   } catch (error) {
     throw apiError(error, "Unable to reset password.");
+  }
+}
+
+export async function sendVerificationOtp(): Promise<MessageResponse> {
+  try {
+    const { data } = await apiClient.post<MessageResponse>("/auth/send-verification-otp");
+    return data;
+  } catch (error) {
+    throw apiError(error, "Unable to send a verification code.");
+  }
+}
+
+export async function verifyAccount(email: string, otp: string): Promise<MessageResponse> {
+  try {
+    const { data } = await apiClient.post<MessageResponse>("/auth/verify-account", { email, otp });
+    return data;
+  } catch (error) {
+    throw apiError(error, "Unable to verify that code.");
+  }
+}
+
+export async function getMe(): Promise<User> {
+  try {
+    const { data } = await apiClient.get<MeResponse>("/me");
+    const user = toUser(data);
+    window.localStorage.setItem(AUTH_KEY, JSON.stringify(user));
+    return user;
+  } catch (error) {
+    throw apiError(error, "Unable to load your account.");
   }
 }
 

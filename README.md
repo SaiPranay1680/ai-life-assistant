@@ -36,6 +36,136 @@ Default admin credentials:
 Important:
 - This is the application login user for the website/admin dashboard.
 - The PostgreSQL database user/password is separate and still uses `ai_app` / `1627` unless you intentionally change it.
+- The login form uses **email + password**. The username `Admin` is the display name, not the login field.
+
+Full click-by-click login instructions: [How to log in (for developers)](#how-to-log-in-for-developers).
+
+---
+
+## How to log in (for developers)
+
+Do this after the stack is running (Docker or local). The UI lives at **http://localhost:3000**. The API lives at **http://localhost:8000**.
+
+### Before you try
+
+1. Frontend is up: open http://localhost:3000 — you should see the AI Life Assistant login split screen.
+2. Backend is up: open http://localhost:8000/health — you should see `{"status":"ok"}`.
+3. Use **http://localhost:3000**, not `127.0.0.1`, unless `FRONTEND_URL` also includes that origin (CORS will block login otherwise).
+4. Do **not** use the Postgres password (`1627`) on the website. Website login is `admin@gmail.com` / `16271627` (or an account you registered).
+
+### Sign in with the seeded admin (fastest)
+
+This is what most developers should do on a fresh database.
+
+1. Open http://localhost:3000. If you are not already on `/login`, go there.
+2. Leave the form on **Welcome back** (sign-in mode). If you see **Create your account**, click **Already have an account? Sign in**.
+3. Email address: `admin@gmail.com`
+4. Password: `16271627`
+5. Click **Sign in**.
+6. On success you are redirected to **`/admin`** (admin role). You should see the admin dashboard, not the normal user dashboard.
+
+If login fails, jump to [Login troubleshooting](#login-troubleshooting).
+
+### Sign in as a normal user
+
+1. Open http://localhost:3000/login.
+2. Stay in sign-in mode.
+3. Enter that user’s **email** and **password**.
+4. Click **Sign in**.
+5. On success you are redirected to **`/dashboard`**.
+
+There is no “username login”. Only email + password.
+
+### Create a new local account (register)
+
+Use this when you need a non-admin user.
+
+1. Open http://localhost:3000/login.
+2. Click **New here? Create an account**.
+3. Enter a **username** (at least 2 characters), **email**, and **password** (at least 6 characters).
+4. Click **Create account**.
+5. The API creates the user in PostgreSQL, issues a JWT, and (if SMTP is configured) sends:
+   - an account-created confirmation email
+   - a separate 6-digit **account verification** OTP
+6. The UI should take you to **`/verify-account`**. Enter the 6-digit code from email, or skip verification for now and go to `/dashboard` (an unverified banner will still appear).
+7. After you sign in later, the same email + password work on the login page. New users land on `/dashboard`, not `/admin`.
+
+If SMTP is not configured, register and login still work. Verification emails are skipped until you set Gmail SMTP in `.env` (see [Email / OTP (optional for login)](#email--otp-optional-for-login)).
+
+### Forgot password
+
+This only works for **email/password** accounts that have a `password_hash`. It does not reset passwords for OIDC-only identities.
+
+1. On the login page, click **Forgot password?**.
+2. Enter the registered email and click **Send OTP**.
+3. The UI always shows a generic success path (“if an account exists…”). The API does not tell you whether the email is registered.
+4. Open **`/verify-reset-otp`**, enter the 6-digit code from email, watch the countdown, resend if needed.
+5. After a valid OTP, you get a short-lived reset token (not the OTP) and land on **`/reset-password`**.
+6. Enter and confirm a new password (min 6 characters), then return to login and sign in with the new password.
+
+### After login: session and roles
+
+- The browser stores the JWT in `localStorage` (`ala-token`) and a small user object (`ala-auth-user`).
+- Session length follows `ACCESS_TOKEN_EXPIRE_MINUTES` (Docker example: 60 minutes). When the token expires, the app sends you back to `/login`.
+- `role=admin` → `/admin`. `role=user` → `/dashboard`.
+- Dashboard verification status comes from **`GET /me`** (`email_verified`), not from frontend-only state. Unverified users see **Account Not Verified** and a **Verify Account** button (`/verify-account`). The seeded admin is already verified.
+
+### Email / OTP (optional for login)
+
+Login itself does **not** need SMTP. You only need Google SMTP for register confirmation, verification OTP, and forgot-password OTP.
+
+In the **root** `.env` (used by Docker backend + Celery worker):
+
+```text
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your_gmail_address@gmail.com
+SMTP_PASSWORD=your_16_character_app_password
+SMTP_FROM_EMAIL=your_gmail_address@gmail.com
+SMTP_FROM_NAME=AI Life Assistant
+```
+
+Never put these in `NEXT_PUBLIC_*` variables. Restart `backend` and `celery-worker` after changing SMTP.
+
+### How login works under the hood
+
+```text
+Browser (/login)
+    POST /auth/login  { email, password }
+        → FastAPI checks PostgreSQL user
+        → bcrypt verify
+        → JWT access token
+    Browser stores token
+    Redirect: admin → /admin   user → /dashboard
+```
+
+Useful API checks (optional):
+
+```bash
+# Health
+curl http://localhost:8000/health
+
+# Login (expect access_token + user)
+curl -X POST http://localhost:8000/auth/login ^
+  -H "Content-Type: application/json" ^
+  -d "{\"email\":\"admin@gmail.com\",\"password\":\"16271627\"}"
+```
+
+On macOS/Linux, use `\` instead of `^` for line continuation.
+
+Interactive API explorer: http://localhost:8000/docs → `POST /auth/login`.
+
+### Login troubleshooting
+
+| Symptom | What to check |
+| --- | --- |
+| Form says “Invalid email or password” | Email is `admin@gmail.com`, password is exactly `16271627`. Re-seed: `python scripts/seed.py` (local) or recreate Docker DB. |
+| Button spins then CORS / network error | Backend down, or you opened `127.0.0.1:3000` while `FRONTEND_URL=http://localhost:3000`. |
+| Frontend loads, login always fails | `NEXT_PUBLIC_API_URL` must be `http://localhost:8000` (browser URL). Rebuild frontend if you changed it. |
+| Redirects to `/dashboard` instead of `/admin` | User `role` is not `admin`. Re-run seed. |
+| Immediately bounced back to login | Token expired or 401 on another API. Sign in again. Confirm `JWT_SECRET` is the same for the running backend. |
+| Forgot-password / verify emails never arrive | SMTP not set, or Celery worker not running. Login still works without mail. |
+| Using Postgres password `1627` on the website | That is the **database** role, not the app user. Use `16271627`. |
 
 ---
 
@@ -77,7 +207,7 @@ After startup:
 | Redis | **not** published on the host — only other containers can reach `redis:6379` |
 | Celery worker / beat | no HTTP port |
 
-Log in with the default admin account in [Default developer/admin account](#default-developeradmin-account) above.
+Follow [How to log in (for developers)](#how-to-log-in-for-developers). For a fresh database, use `admin@gmail.com` / `16271627` and you should land on `/admin`.
 
 ---
 
@@ -554,13 +684,14 @@ http://localhost:3000
 
 ## 9. Log in with the default admin account
 
-Use these credentials on the login page:
+Step-by-step (UI, register, forgot password, session, troubleshooting): [How to log in (for developers)](#how-to-log-in-for-developers).
 
-- Username: `Admin`
-- Email: `admin@gmail.com`
+Quick admin credentials on http://localhost:3000/login:
+
+- Email: `admin@gmail.com` (this is the login field — not the username)
 - Password: `16271627`
 
-The app should redirect logged-in admins to the admin dashboard.
+Admins are redirected to `/admin`. Normal users are redirected to `/dashboard`.
 
 ---
 
@@ -634,11 +765,12 @@ ALTER USER ai_app WITH PASSWORD '1627';
 
 ### Admin login fails
 
-Check:
-- the admin user exists in the database
-- the password is exactly `16271627`
-- the database is migrated
-- you ran the seed script
+See the table in [Login troubleshooting](#login-troubleshooting).
+
+Quick checks:
+- you signed in with **email** `admin@gmail.com`, not username `Admin`
+- the password is exactly `16271627` (not the Postgres password `1627`)
+- the database is migrated and you ran the seed script
 
 Run:
 

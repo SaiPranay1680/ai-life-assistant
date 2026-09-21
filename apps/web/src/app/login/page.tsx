@@ -3,13 +3,15 @@
 import { LoginForm } from "@/components/forms/LoginForm";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 export default function LoginPage() {
-  const { login, register, resetPassword, user, ready } = useAuth();
+  const { login, register, user, ready } = useAuth();
   const router = useRouter();
+  const skipLoginRedirect = useRef(false);
 
   useEffect(() => {
+    if (skipLoginRedirect.current) return;
     if (ready && user) {
       const isAdmin = (user.role ?? "user") === "admin";
       router.replace(isAdmin ? "/admin" : "/dashboard");
@@ -36,15 +38,15 @@ export default function LoginPage() {
           onSubmit={async (email, password, mode, username) => {
             let nextUser;
             if (mode === "register") {
+              skipLoginRedirect.current = true;
               nextUser = await register(email, password, username);
+              router.push("/verify-account");
+              return;
             } else {
               nextUser = await login(email, password);
             }
             const isAdmin = (nextUser.role ?? "user") === "admin";
             router.push(isAdmin ? "/admin" : "/dashboard");
-          }}
-          onResetPassword={async (email, newPassword, confirmPassword) => {
-            return resetPassword(email, newPassword, confirmPassword);
           }}
         />
       </section>

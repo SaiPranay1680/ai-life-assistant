@@ -26,6 +26,7 @@ export type User = {
   name: string;
   email: string;
   role?: "user" | "admin";
+  emailVerified?: boolean;
 };
 
 export type AttentionCard = {
