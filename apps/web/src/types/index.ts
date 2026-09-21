@@ -3,6 +3,8 @@ export type Priority = "high" | "medium" | "low";
 export type DocumentType =
   | "Bill"
   | "Insurance"
+  | "Car Insurance"
+  | "Health Insurance"
   | "Purchase"
   | "Warranty"
   | "Important document";
@@ -86,6 +88,18 @@ export type ChatMessage = {
   sources?: string[];
 };
 
+export type ExtractedValue = {
+  raw?: string | null;
+  normalized?: string | null;
+  confidence?: number | null;
+  evidence?: Array<{ page_number: number; snippet: string }>;
+};
+
+export type StructuredExtraction = {
+  document_type?: ExtractedValue | null;
+  [key: string]: ExtractedValue | ExtractedValue[] | null | undefined;
+};
+
 export type ExtractedFields = {
   documentType: string;
   provider: string;
@@ -95,4 +109,6 @@ export type ExtractedFields = {
   premium: string;
   previewTitle: string;
   previewLines: string[];
+  processingStatus?: string;
+  structuredExtraction?: StructuredExtraction | null;
 };

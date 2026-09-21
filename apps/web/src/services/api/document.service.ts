@@ -21,9 +21,18 @@ function apiError(error: unknown, fallback: string): Error {
 
 function mapType(value: string | null): DocumentType {
   const key = (value ?? "").toLowerCase();
-  if (key.includes("bill")) return "Bill";
+  if (key.includes("bill") && !key.includes("insurance")) return "Bill";
+  if (key.includes("health") && (key.includes("insurance") || key.includes("policy"))) {
+    return "Health Insurance";
+  }
+  if (
+    (key.includes("car") || key.includes("motor") || key.includes("auto") || key.includes("vehicle")) &&
+    (key.includes("insurance") || key.includes("policy"))
+  ) {
+    return "Car Insurance";
+  }
   if (key.includes("insurance")) return "Insurance";
-  if (key.includes("purchase") || key.includes("invoice")) return "Purchase";
+  if (key.includes("purchase") || key.includes("invoice") || key.includes("receipt")) return "Purchase";
   if (key.includes("warranty")) return "Warranty";
   return "Important document";
 }
@@ -99,7 +108,15 @@ export async function getExtraction(documentId: string): Promise<ExtractedFields
 
 export async function updateExtraction(
   documentId: string,
-  fields: Pick<ExtractedFields, "documentType" | "provider" | "policyNumber" | "startDate" | "expiryDate" | "premium">,
+  fields: {
+    documentType: string;
+    provider?: string;
+    policyNumber?: string;
+    startDate?: string;
+    expiryDate?: string;
+    premium?: string;
+    structuredFields?: Record<string, string>;
+  },
 ): Promise<ExtractedFields> {
   try {
     const { data } = await apiClient.patch<ExtractedFields>(`/documents/${documentId}/extraction`, fields);

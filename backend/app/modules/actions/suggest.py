@@ -82,12 +82,49 @@ def _item(
 
 def suggestions_for(document: Document, fields: dict[str, ExtractionField]) -> list[dict]:
     doc_type = (document.document_type or _value(fields, "documentType")).lower()
-    provider = _value(fields, "provider") or "this document"
-    expiry_raw = _value(fields, "expiryDate")
-    due = _iso_date(fields, "expiryDate")
-    amount = _value(fields, "premium")
-    identifier = _value(fields, "policyNumber")
+    expiry_raw = (
+        _value(fields, "expiryDate")
+        or _value(fields, "due_date")
+        or _value(fields, "expiry_date")
+        or _value(fields, "warranty_expiry")
+        or _value(fields, "warranty_end")
+    )
+    due = (
+        _iso_date(fields, "expiryDate")
+        or _iso_date(fields, "due_date")
+        or _iso_date(fields, "expiry_date")
+        or _iso_date(fields, "warranty_expiry")
+        or _iso_date(fields, "warranty_end")
+    )
+    amount = (
+        _value(fields, "premium")
+        or _value(fields, "amount_due")
+        or _value(fields, "total")
+    )
+    identifier = (
+        _value(fields, "policyNumber")
+        or _value(fields, "bill_number")
+        or _value(fields, "policy_number")
+        or _value(fields, "receipt_number")
+        or _value(fields, "serial_number")
+    )
     filename = document.original_filename or "document"
+    evidence_due = (
+        "due_date"
+        if _value(fields, "due_date")
+        else "warranty_expiry"
+        if _value(fields, "warranty_expiry")
+        else "expiry_date"
+        if _value(fields, "expiry_date")
+        else "expiryDate"
+    )
+    evidence_amount = "amount_due" if _value(fields, "amount_due") else "premium"
+    provider = (
+        _value(fields, "provider")
+        or _value(fields, "merchant")
+        or _value(fields, "warranty_provider")
+        or "this document"
+    )
 
     if "insurance" in doc_type and expiry_raw:
         return [
@@ -117,7 +154,7 @@ def suggestions_for(document: Document, fields: dict[str, ExtractionField]) -> l
                 due,
                 _label(expiry_raw, due) or "Due date not confirmed",
                 reason,
-                _evidence(document, fields, "expiryDate" if expiry_raw else "premium"),
+                _evidence(document, fields, evidence_due if expiry_raw else evidence_amount),
                 "Remind me 3 days before",
                 0.75 if expiry_raw else 0.6,
             )
@@ -153,7 +190,7 @@ def suggestions_for(document: Document, fields: dict[str, ExtractionField]) -> l
                 due,
                 _label(expiry_raw, due) or "No expiry confirmed",
                 reason,
-                _evidence(document, fields, "expiryDate" if expiry_raw else "documentType"),
+                _evidence(document, fields, evidence_due if expiry_raw else "documentType"),
                 "Remind me 14 days before",
                 0.7 if expiry_raw else 0.5,
             )
