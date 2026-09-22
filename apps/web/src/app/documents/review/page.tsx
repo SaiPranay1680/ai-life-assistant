@@ -5,139 +5,90 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { decideDocumentPurpose, getExtraction, updateExtraction } from "@/services/api/document.service";
-import type { ExtractedFields, ExtractedValue } from "@/types";
+import type { ExtractedField, ExtractedFields } from "@/types";
+import { FOLDER_CATEGORIES, FOLDER_TAXONOMY, folderFor } from "@/utils/documentFolders";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
 
-type FieldDef = { key: string; label: string };
-
-const UTILITY_BILL_FIELDS: FieldDef[] = [
-  { key: "provider", label: "Provider" },
-  { key: "bill_number", label: "Bill number" },
-  { key: "customer_id", label: "Customer ID" },
-  { key: "billing_period_start", label: "Billing period start" },
-  { key: "billing_period_end", label: "Billing period end" },
-  { key: "due_date", label: "Due date" },
-  { key: "amount_due", label: "Amount due" },
-  { key: "service_address", label: "Service address" },
-];
-
-const PURCHASE_RECEIPT_FIELDS: FieldDef[] = [
-  { key: "merchant", label: "Merchant" },
-  { key: "receipt_number", label: "Receipt number" },
-  { key: "purchase_date", label: "Purchase date" },
-  { key: "subtotal", label: "Subtotal" },
-  { key: "tax", label: "Tax" },
-  { key: "total", label: "Total" },
-  { key: "payment_method", label: "Payment method" },
-];
-
-const WARRANTY_FIELDS: FieldDef[] = [
-  { key: "product", label: "Product" },
-  { key: "brand", label: "Brand" },
-  { key: "model", label: "Model" },
-  { key: "serial_number", label: "Serial number" },
-  { key: "warranty_provider", label: "Warranty provider" },
-  { key: "purchase_date", label: "Purchase date" },
-  { key: "warranty_start", label: "Warranty start" },
-  { key: "warranty_expiry", label: "Warranty expiry" },
-  { key: "warranty_duration", label: "Warranty duration" },
-];
-
-const LEGACY_FIELDS: FieldDef[] = [
-  { key: "provider", label: "Provider" },
-  { key: "policyNumber", label: "Policy number" },
-  { key: "startDate", label: "Start date" },
-  { key: "expiryDate", label: "Expiry date" },
-  { key: "premium", label: "Premium" },
-];
-
-function valueText(value: ExtractedValue | null | undefined): string {
-  if (!value) return "";
-  return (value.raw || value.normalized || "").trim();
+function humanize(key: string): string {
+  return key.replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function structuredTypeId(data: ExtractedFields): string {
-  const fromStructured = data.structuredExtraction?.document_type;
-  if (fromStructured && typeof fromStructured === "object" && !Array.isArray(fromStructured)) {
-    const id = (fromStructured.normalized || fromStructured.raw || "").toLowerCase();
-    if (id) return id.replace(/\s+/g, "_");
-  }
-  const label = (data.documentType || "").toLowerCase();
-  if (label.includes("bill") || label.includes("utility")) return "utility_bill";
-  if (label.includes("health") && label.includes("insurance")) return "health_insurance";
-  if (
-    (label.includes("car") || label.includes("motor") || label.includes("auto")) &&
-    label.includes("insurance")
-  ) {
-    return "car_insurance";
-  }
-  if (label.includes("insurance")) return "insurance";
-  if (label.includes("purchase") || label.includes("receipt")) return "purchase_receipt";
-  if (label.includes("warranty")) return "warranty";
-  return "generic";
-}
-
-function fieldDefsFor(typeId: string): FieldDef[] {
-  if (typeId === "utility_bill") return UTILITY_BILL_FIELDS;
-  if (typeId === "purchase_receipt") return PURCHASE_RECEIPT_FIELDS;
-  if (typeId === "warranty") return WARRANTY_FIELDS;
-  return LEGACY_FIELDS;
-}
-
-function usesStructuredForm(typeId: string): boolean {
-  return typeId === "utility_bill" || typeId === "purchase_receipt" || typeId === "warranty";
-}
-
-function formatPurchaseItems(data: ExtractedFields): string[] {
-  const items = data.structuredExtraction?.items;
-  if (!Array.isArray(items) || items.length === 0) return [];
-  return items.map((item, index) => {
-    if (!item || typeof item !== "object" || Array.isArray(item)) {
-      return `Item ${index + 1}`;
+function reviewFields(data: ExtractedFields): ExtractedField[] {
+  const type = (data.documentType || "").toLowerCase();
+  const hideProvider = type.includes("insurance");
+  const fromApi = (data.fields ?? []).filter((field) => {
+    if (!field.value.trim() || field.name === "currency") return false;
+    if (field.name === "folder_category" || field.name === "folder_subcategory") return false;
+    if (hideProvider && (field.name === "provider" || field.label?.toLowerCase() === "provider")) {
+      return false;
     }
-    const row = item as Record<string, ExtractedValue | null | undefined>;
-    const name = valueText(row.name) || `Item ${index + 1}`;
-    const qty = valueText(row.quantity) || "1";
-    const amount = valueText(row.amount) || valueText(row.unit_price) || valueText(row.total);
-    return amount ? `${name} — Qty ${qty} — ${amount}` : `${name} — Qty ${qty}`;
+    return true;
   });
+  const unique: ExtractedField[] = [];
+  const seen = new Set<string>();
+  for (const field of fromApi) {
+    const fingerprint = `${(field.label || field.name).toLowerCase()}|${field.value.replace(/\s+/g, "").toLowerCase()}`;
+    if (seen.has(fingerprint)) continue;
+    seen.add(fingerprint);
+    unique.push(field);
+  }
+  if (unique.length > 0) return unique;
+  const fallback: Array<[string, string]> = [
+    ["policyNumber", data.policyNumber],
+    ["startDate", data.startDate ?? ""],
+    ["expiryDate", data.expiryDate],
+    ["premium", data.premium],
+  ];
+  if (!hideProvider) fallback.unshift(["provider", data.provider]);
+  return fallback
+    .filter(([, value]) => value.trim())
+    .map(([name, value]) => ({
+      name,
+      value,
+      evidence: "",
+      page: 1,
+      confidence: 0,
+      label: humanize(name),
+    }));
 }
 
-function initialForm(data: ExtractedFields): Record<string, string> {
-  const typeId = structuredTypeId(data);
+function initialForm(data: ExtractedFields, fields: ExtractedField[]): Record<string, string> {
+  const guessed = folderFor({
+    name: data.previewTitle,
+    type: data.documentType,
+    purposeCategory: data.purposeCategory,
+    folderCategory: data.folderCategory,
+    folderSubcategory: data.folderSubcategory,
+  });
   const form: Record<string, string> = {
     documentType: data.documentType,
+    folderCategory: guessed.category,
+    folderSubcategory: guessed.subcategory,
   };
-  if (usesStructuredForm(typeId) && data.structuredExtraction) {
-    for (const field of fieldDefsFor(typeId)) {
-      const raw = data.structuredExtraction[field.key];
-      form[field.key] =
-        raw && typeof raw === "object" && !Array.isArray(raw) ? valueText(raw) : "";
-    }
-    return form;
+  for (const field of fields) {
+    form[field.name] = field.value;
   }
-  form.provider = data.provider;
-  form.policyNumber = data.policyNumber;
-  form.startDate = data.startDate ?? "";
-  form.expiryDate = data.expiryDate;
-  form.premium = data.premium;
   return form;
+}
+
+function confidenceTone(fields: ExtractedField[]): { label: string; tone: "success" | "warning" | "danger" } {
+  if (fields.length === 0) return { label: "Needs a look", tone: "warning" };
+  const average = fields.reduce((sum, field) => sum + (field.confidence || 0), 0) / fields.length;
+  if (average >= 0.85) return { label: "High confidence", tone: "success" };
+  if (average >= 0.6) return { label: "Check these values", tone: "warning" };
+  return { label: "Low confidence", tone: "danger" };
 }
 
 function ReviewForm({ data, documentId }: { data: ExtractedFields; documentId: string }) {
   const router = useRouter();
-  const typeId = useMemo(() => structuredTypeId(data), [data]);
-  const fieldDefs = fieldDefsFor(typeId);
-  const itemLines = useMemo(
-    () => (typeId === "purchase_receipt" ? formatPurchaseItems(data) : []),
-    [data, typeId],
-  );
+  const fields = useMemo(() => reviewFields(data), [data]);
+  const badge = useMemo(() => confidenceTone(fields), [fields]);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState(() => initialForm(data));
+  const [form, setForm] = useState(() => initialForm(data, fields));
 
   function update(field: string, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -147,33 +98,21 @@ function ReviewForm({ data, documentId }: { data: ExtractedFields; documentId: s
     setError(null);
     setSaving(true);
     try {
-      if (usesStructuredForm(typeId)) {
-        const structuredFields: Record<string, string> = {};
-        for (const field of fieldDefs) {
-          structuredFields[field.key] = form[field.key] ?? "";
-        }
-        const fallbackType =
-          typeId === "purchase_receipt"
-            ? "Purchase"
-            : typeId === "warranty"
-              ? "Warranty"
-              : "Bill";
-        await updateExtraction(documentId, {
-          documentType: form.documentType || fallbackType,
-          provider:
-            form.warranty_provider ?? form.merchant ?? form.provider ?? "",
-          structuredFields,
-        });
-      } else {
-        await updateExtraction(documentId, {
-          documentType: form.documentType,
-          provider: form.provider ?? "",
-          policyNumber: form.policyNumber ?? "",
-          startDate: form.startDate ?? "",
-          expiryDate: form.expiryDate ?? "",
-          premium: form.premium ?? "",
-        });
+      const structuredFields: Record<string, string> = {};
+      for (const field of fields) {
+        structuredFields[field.name] = form[field.name] ?? "";
       }
+      await updateExtraction(documentId, {
+        documentType: form.documentType,
+        provider: form.provider ?? form.merchant ?? form.warranty_provider ?? data.provider ?? "",
+        policyNumber: form.policyNumber ?? form.policy_number ?? form.service_number ?? "",
+        startDate: form.startDate ?? form.effective_date ?? form.purchase_date ?? "",
+        expiryDate: form.expiryDate ?? form.expiry_date ?? form.due_date ?? form.warranty_expiry ?? "",
+        premium: form.premium ?? form.amount_due ?? form.total ?? "",
+        structuredFields,
+        folderCategory: form.folderCategory,
+        folderSubcategory: form.folderSubcategory,
+      });
       router.push("/actions");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save extraction.");
@@ -189,7 +128,7 @@ function ReviewForm({ data, documentId }: { data: ExtractedFields; documentId: s
       await decideDocumentPurpose(documentId, decision);
       router.push(decision === "keep" ? "/actions" : "/documents/upload");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to save that choice.");
+      setError(err instanceof Error ? err.message : "Unable to save this choice.");
     } finally {
       setSaving(false);
     }
@@ -204,12 +143,10 @@ function ReviewForm({ data, documentId }: { data: ExtractedFields; documentId: s
   if (rejected) {
     return (
       <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8">
-        <h2 className="text-lg font-semibold text-slate-900">Document not stored</h2>
-        <p className="mt-3 text-sm leading-6 text-slate-600">
-          {data.purposeReason || "This file is not a bill, policy, invoice, or important record."}
-        </p>
+        <h2 className="text-lg font-semibold text-slate-900">Invalid document</h2>
+        <p className="mt-3 text-sm leading-6 text-slate-600">Try uploading another file.</p>
         <div className="mt-6">
-          <Button onClick={() => router.push("/documents/upload")}>Upload another document</Button>
+          <Button onClick={() => router.push("/documents/upload")}>Upload another</Button>
         </div>
       </div>
     );
@@ -221,7 +158,7 @@ function ReviewForm({ data, documentId }: { data: ExtractedFields; documentId: s
         <p className="text-xs font-medium tracking-wide text-slate-400 uppercase">{data.previewTitle}</p>
         <h2 className="mt-2 text-lg font-semibold text-slate-900">Keep this file?</h2>
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          {data.purposeReason || "This does not look like a bill, insurance policy, invoice, or warranty."}
+          Document type is unclear. Keep it or upload another.
         </p>
         <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <Button variant="ghost" onClick={() => void decide("discard")} disabled={saving}>
@@ -249,36 +186,71 @@ function ReviewForm({ data, documentId }: { data: ExtractedFields; documentId: s
         </ul>
       </div>
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-slate-900">AI found these details</h2>
-          <Badge tone="success">High confidence</Badge>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-semibold text-slate-900">What you need to know</h2>
+          <Badge tone={badge.tone}>{badge.label}</Badge>
         </div>
         <div className="mt-5 space-y-4">
+          <label className="block text-left">
+            <span className="mb-1.5 block text-sm font-semibold text-slate-800">Category</span>
+            <select
+              value={form.folderCategory ?? "Records"}
+              onChange={(event) => {
+                const next = event.target.value;
+                const options = FOLDER_TAXONOMY[next] ?? FOLDER_TAXONOMY.Records;
+                setForm((current) => ({
+                  ...current,
+                  folderCategory: next,
+                  folderSubcategory: options.includes(current.folderSubcategory)
+                    ? current.folderSubcategory
+                    : options[0],
+                }));
+              }}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            >
+              {FOLDER_CATEGORIES.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-xs text-slate-400">
+              Auto-filled from the document. Change it if this is wrong.
+            </span>
+          </label>
+          <label className="block text-left">
+            <span className="mb-1.5 block text-sm font-semibold text-slate-800">Subcategory</span>
+            <select
+              value={form.folderSubcategory ?? ""}
+              onChange={(event) => update("folderSubcategory", event.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            >
+              {(FOLDER_TAXONOMY[form.folderCategory] ?? FOLDER_TAXONOMY.Records).map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </label>
           <Input
             label="Document type"
             value={form.documentType}
             disabled={!editing}
             onChange={(event) => update("documentType", event.target.value)}
           />
-          {fieldDefs.map((field) => (
-            <Input
-              key={field.key}
-              label={field.label}
-              value={form[field.key] ?? ""}
-              disabled={!editing}
-              onChange={(event) => update(field.key, event.target.value)}
-            />
-          ))}
-          {itemLines.length > 0 ? (
-            <div>
-              <p className="mb-2 text-sm font-medium text-slate-700">Items</p>
-              <ul className="space-y-1 text-sm text-slate-600">
-                {itemLines.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
+          {fields.map((field) => (
+            <div key={field.name}>
+              <Input
+                label={field.label || humanize(field.name)}
+                value={form[field.name] ?? ""}
+                disabled={!editing}
+                onChange={(event) => update(field.name, event.target.value)}
+              />
+              {!editing && field.evidence ? (
+                <p className="mt-1 text-xs text-slate-400">From the document: {field.evidence}</p>
+              ) : null}
             </div>
-          ) : null}
+          ))}
         </div>
         <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
           <Button variant="ghost" onClick={() => setEditing((value) => !value)}>
@@ -320,7 +292,7 @@ function ReviewContent() {
   return (
     <AppShell>
       {!documentId ? (
-        <p className="text-sm text-rose-600">Missing document id. Upload the file again.</p>
+        <p className="text-sm text-rose-600">Missing document. Please upload the file again.</p>
       ) : null}
       {query.isLoading ? (
         <p className="text-sm text-slate-500">Loading extraction…</p>

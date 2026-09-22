@@ -23,6 +23,9 @@ class DocumentOut(BaseModel):
     purpose_status: str | None = None
     purpose_reason: str | None = None
     purpose_category: str | None = None
+    purpose_subtype: str | None = None
+    folder_category: str | None = None
+    folder_subcategory: str | None = None
     page_count: int | None = None
     created_at: datetime | None
 
@@ -44,6 +47,8 @@ class ExtractionUpdate(BaseModel):
     premium: str = ""
     # Type-specific raw string edits from the review UI (e.g. bill_number, due_date).
     structuredFields: dict[str, str] | None = None
+    folderCategory: str = ""
+    folderSubcategory: str = ""
 
 
 class EvidenceSnippet(BaseModel):
@@ -166,6 +171,7 @@ class ExtractedFieldOut(BaseModel):
     evidence: str
     page: int
     confidence: float
+    label: str = ""
 
 
 class ExtractionOut(BaseModel):
@@ -182,4 +188,6 @@ class ExtractionOut(BaseModel):
     purposeStatus: str = ""
     purposeReason: str = ""
     purposeCategory: str = ""
+    folderCategory: str = ""
+    folderSubcategory: str = ""
     fields: list[ExtractedFieldOut] = []

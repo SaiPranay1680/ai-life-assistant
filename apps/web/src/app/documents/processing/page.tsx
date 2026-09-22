@@ -56,7 +56,7 @@ function ProcessingContent() {
         {query.data?.original_filename || params.get("file") || "Document processing"}
       </h2>
       {!documentId ? (
-        <p role="alert" className="mt-4 text-sm text-rose-600">Missing document id. Open a document from the vault or upload a file.</p>
+        <p role="alert" className="mt-4 text-sm text-rose-600">Missing document. Please upload the file again.</p>
       ) : query.isError ? (
         <div role="alert" className="mt-4 space-y-4">
           <p className="text-sm text-rose-600">{query.error.message || "Unable to check document status."}</p>
@@ -66,19 +66,17 @@ function ProcessingContent() {
         </div>
       ) : failed ? (
         <p role="alert" className="mt-4 text-sm text-rose-600">
-          We could not process this document. You can view or delete the uploaded file in your document vault, then upload a clearer copy.
+          Unable to process this document. Try uploading another.
         </p>
       ) : rejected ? (
         <div role="alert" className="mt-4 space-y-4">
-          <p className="text-sm text-rose-600">
-            {query.data?.purpose_reason || "This file is not a bill, policy, or record we can store."}
-          </p>
+          <p className="text-sm text-rose-600">Invalid document. Try uploading another.</p>
           <Link href="/documents/upload" className="text-sm font-medium text-blue-600 hover:underline">
-            Upload a supported document
+            Upload another
           </Link>
         </div>
       ) : unknownStatus ? (
-        <p role="alert" className="mt-4 text-sm text-amber-700">This document has an unexpected processing status. Check it in your document vault.</p>
+        <p role="alert" className="mt-4 text-sm text-amber-700">Unable to process this document. Check it in Documents.</p>
       ) : !query.data ? (
         <p role="status" className="mt-4 text-sm text-slate-500">Checking document status...</p>
       ) : (
@@ -96,7 +94,7 @@ function ProcessingContent() {
       )}
       <div className="mt-6 flex gap-4 text-sm font-medium text-blue-600">
         <Link href="/documents" className="hover:underline">Go to document vault</Link>
-        {!documentId || failed || rejected ? <Link href="/documents/upload" className="hover:underline">Upload a document</Link> : null}
+        {!documentId || failed || rejected ? <Link href="/documents/upload" className="hover:underline">Upload another</Link> : null}
       </div>
     </div>
   );

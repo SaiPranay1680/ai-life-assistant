@@ -78,6 +78,7 @@ class DocumentIntelligenceTests(TestCase):
         decision = classify_document(_doc("sky", is_image=True, filename="family.jpg"))
         self.assertEqual(decision.status, "rejected")
         self.assertEqual(decision.category, "photo")
+        self.assertEqual(decision.reason, "Invalid document. Try uploading another.")
 
     def test_too_many_pages_is_rejected(self) -> None:
         decision = classify_document(_doc("hello", page_count=40))

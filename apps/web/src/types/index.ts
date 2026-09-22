@@ -75,6 +75,8 @@ export type VaultDocument = {
   type: DocumentType;
   importantDate: string;
   status: DocumentStatus;
+  category: string;
+  subcategory: string;
 };
 
 export type TimelineEvent = {
@@ -110,6 +112,7 @@ export type ExtractedField = {
   evidence: string;
   page: number;
   confidence: number;
+  label?: string;
 };
 
 export type ExtractedFields = {
@@ -126,5 +129,7 @@ export type ExtractedFields = {
   purposeStatus?: string;
   purposeReason?: string;
   purposeCategory?: string;
+  folderCategory?: string;
+  folderSubcategory?: string;
   fields?: ExtractedField[];
 };

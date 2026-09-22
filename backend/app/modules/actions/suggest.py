@@ -107,6 +107,9 @@ def suggestions_for(document: Document, fields: dict[str, ExtractionField]) -> l
         or _value(fields, "policy_number")
         or _value(fields, "receipt_number")
         or _value(fields, "serial_number")
+        or _value(fields, "service_number")
+        or _value(fields, "account_number")
+        or _value(fields, "customer_id")
     )
     filename = document.original_filename or "document"
     evidence_due = (

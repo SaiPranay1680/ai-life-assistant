@@ -1,5 +1,6 @@
 import axios from "axios";
 import type { DocumentType, DocumentStatus, ExtractedFields, VaultDocument } from "@/types";
+import { folderFor } from "@/utils/documentFolders";
 import { apiClient } from "./client";
 
 type ApiDocument = {
@@ -11,6 +12,9 @@ type ApiDocument = {
   purpose_status?: string | null;
   purpose_reason?: string | null;
   purpose_category?: string | null;
+  purpose_subtype?: string | null;
+  folder_category?: string | null;
+  folder_subcategory?: string | null;
   created_at: string | null;
 };
 
@@ -52,19 +56,32 @@ function mapStatus(value: string): DocumentStatus {
 }
 
 function toVault(doc: ApiDocument): VaultDocument {
+  const type = mapType(doc.document_type);
+  const folder = folderFor({
+    name: doc.original_filename,
+    type,
+    purposeCategory: doc.purpose_category,
+    purposeSubtype: doc.purpose_subtype ?? doc.document_type,
+    folderCategory: doc.folder_category,
+    folderSubcategory: doc.folder_subcategory,
+  });
   return {
     id: doc.id,
     name: doc.original_filename,
-    type: mapType(doc.document_type),
+    type,
     importantDate: doc.important_date?.trim() ? doc.important_date : "—",
     status: mapStatus(doc.processing_status),
+    category: folder.category,
+    subcategory: folder.subcategory,
   };
 }
 
 export async function getDocuments(): Promise<VaultDocument[]> {
   try {
     const { data } = await apiClient.get<ApiDocument[]>("/documents");
-    return data.map(toVault);
+    return data
+      .filter((doc) => doc.processing_status !== "rejected" && doc.processing_status !== "discarded")
+      .map(toVault);
   } catch (error) {
     throw apiError(error, "Unable to load documents.");
   }
@@ -79,7 +96,7 @@ export async function uploadDocument(file: File): Promise<{ fileName: string; id
     throw new Error("File must be 20 MB or smaller.");
   }
   if (/jpe?g|png/i.test(file.type || file.name) && file.size > 10 * 1024 * 1024) {
-    throw new Error("Photos and scans must be 10 MB or smaller.");
+    throw new Error("Images must be 10 MB or smaller.");
   }
 
   const body = new FormData();
@@ -125,6 +142,8 @@ export async function updateExtraction(
     expiryDate?: string;
     premium?: string;
     structuredFields?: Record<string, string>;
+    folderCategory?: string;
+    folderSubcategory?: string;
   },
 ): Promise<ExtractedFields> {
   try {
@@ -143,7 +162,7 @@ export async function decideDocumentPurpose(
     const { data } = await apiClient.post<ExtractedFields>(`/documents/${documentId}/purpose`, { decision });
     return data;
   } catch (error) {
-    throw apiError(error, "Unable to save that choice.");
+    throw apiError(error, "Unable to save this choice.");
   }
 }
 

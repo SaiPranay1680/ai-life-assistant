@@ -56,7 +56,7 @@ def detect_mime(data: bytes) -> str:
 
 def validate_file_type(extension: str, detected_mime: str) -> None:
     if detected_mime not in ALLOWED_MIME_TYPES:
-        raise ValueError("File contents are not a PDF, JPG or PNG.")
+        raise ValueError("Invalid file type.")
     if extension not in MIME_EXTENSION_MAP[detected_mime]:
         raise ValueError("File type does not match the file extension.")
 

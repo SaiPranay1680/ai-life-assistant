@@ -34,21 +34,10 @@ class Settings(BaseSettings):
     clamav_port: int = 3310
     clamav_required: bool = False
     clamav_timeout_seconds: int = 30
-    smtp_host: str = "smtp.gmail.com"
-    smtp_port: int = 587
-    smtp_user: str = ""
-    smtp_password: str = ""
-    smtp_from_email: str = ""
-    smtp_from_name: str = "AI Life Assistant"
-    smtp_use_tls: bool = True
-    otp_expiry_minutes: int = 10
-    otp_max_attempts: int = 5
-    otp_resend_cooldown_seconds: int = 60
-    otp_request_limit: int = 5
-    otp_request_window_seconds: int = 3600
-    otp_verify_limit: int = 10
-    otp_verify_window_seconds: int = 900
-    password_reset_token_minutes: int = 10
+    # Document intelligence. "gemini" uses the API key; "local" stays on regex extractors.
+    ai_provider: str = "gemini"
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
 
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env",

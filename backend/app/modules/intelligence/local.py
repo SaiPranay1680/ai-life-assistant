@@ -1,8 +1,15 @@
 import re
 
 from ..documents.text import DATE_TOKEN, FieldHit, empty_field, normalize_amount, normalize_date
+from .important import humanize_label, important_keys_for
 from .schemas import SCHEMA_FIELDS
-from .types import NormalizedDocument, PurposeDecision
+from .types import (
+    INVALID_DOCUMENT_REASON,
+    UNCLEAR_DOCUMENT_REASON,
+    IntelligenceResult,
+    NormalizedDocument,
+    PurposeDecision,
+)
 
 LOREM_MARKERS = ("lorem ipsum", "consectetur adipiscing", "dolor sit amet")
 PUBLICATION_MARKERS = ("newspaper", "classified ads", "sports desk", "editorial", "volume no", "issue no")
@@ -75,7 +82,7 @@ def classify_document(document: NormalizedDocument) -> PurposeDecision:
             document_type="Other",
             category="publication",
             subtype="too_many_pages",
-            reason="This file has too many pages for a personal bill, policy, or record. Upload a single document instead.",
+            reason=INVALID_DOCUMENT_REASON,
             confidence=0.95,
         )
     if any(marker in lowered for marker in LOREM_MARKERS):
@@ -84,7 +91,7 @@ def classify_document(document: NormalizedDocument) -> PurposeDecision:
             document_type="Other",
             category="other",
             subtype="placeholder",
-            reason="The uploaded file appears to contain placeholder text, not a bill, insurance policy, receipt, or another supported record.",
+            reason=INVALID_DOCUMENT_REASON,
             confidence=0.99,
         )
     if any(marker in lowered for marker in PUBLICATION_MARKERS) and _score(lowered, CATEGORY_SIGNALS["Insurance"] + CATEGORY_SIGNALS["Bill"]) < 2:
@@ -93,7 +100,7 @@ def classify_document(document: NormalizedDocument) -> PurposeDecision:
             document_type="Other",
             category="publication",
             subtype="newspaper",
-            reason="This looks like a newspaper or publication, not a personal action document. This app does not store reading archives.",
+            reason=INVALID_DOCUMENT_REASON,
             confidence=0.9,
         )
     if document.is_image and len(stripped) < PHOTO_TEXT_LIMIT:
@@ -102,7 +109,7 @@ def classify_document(document: NormalizedDocument) -> PurposeDecision:
             document_type="Other",
             category="photo",
             subtype="natural_photo",
-            reason="This looks like a personal photo rather than a bill, policy, or scanned record. This app is not a photo gallery.",
+            reason=INVALID_DOCUMENT_REASON,
             confidence=0.92,
         )
     if len(stripped) < 8:
@@ -111,7 +118,7 @@ def classify_document(document: NormalizedDocument) -> PurposeDecision:
             document_type="Other",
             category="other",
             subtype="empty",
-            reason="We could not find usable text in this file. Upload a clearer PDF or photo of the document.",
+            reason=INVALID_DOCUMENT_REASON,
             confidence=0.9,
         )
 
@@ -126,7 +133,7 @@ def classify_document(document: NormalizedDocument) -> PurposeDecision:
             document_type="Other",
             category="other",
             subtype=subtype,
-            reason="This does not look like a bill, insurance policy, invoice, or warranty. You can keep it as a record or discard it.",
+            reason=UNCLEAR_DOCUMENT_REASON,
             confidence=0.84,
         )
     if best_score >= 2:
@@ -135,7 +142,7 @@ def classify_document(document: NormalizedDocument) -> PurposeDecision:
             document_type=best_type,
             category=best_type.lower().replace(" ", "_"),
             subtype=best_type.lower().replace(" ", "_"),
-            reason=f"This looks like a {best_type.lower()} we can extract details from.",
+            reason=f"{best_type} identified.",
             confidence=min(0.7 + 0.08 * best_score, 0.97),
         )
     if best_score == 1:
@@ -144,7 +151,7 @@ def classify_document(document: NormalizedDocument) -> PurposeDecision:
             document_type="Other",
             category="other",
             subtype="unclear",
-            reason="We are not sure this is a supported life-admin document. Keep it as a record or discard it.",
+            reason=UNCLEAR_DOCUMENT_REASON,
             confidence=0.55,
         )
     return PurposeDecision(
@@ -152,7 +159,7 @@ def classify_document(document: NormalizedDocument) -> PurposeDecision:
         document_type="Other",
         category="other",
         subtype="unclear",
-        reason="This file is valid, but it does not look like a bill, policy, invoice, warranty, or identity record.",
+        reason=UNCLEAR_DOCUMENT_REASON,
         confidence=0.6,
     )
 
@@ -240,8 +247,30 @@ def extract_fields(document: NormalizedDocument, document_type: str) -> dict[str
 
 
 class LocalIntelligenceProvider:
+    supports_native_files = False
+
     def classify(self, document: NormalizedDocument) -> PurposeDecision:
         return classify_document(document)
 
     def extract(self, document: NormalizedDocument, document_type: str) -> dict[str, FieldHit]:
         return extract_fields(document, document_type)
+
+    def analyze(
+        self,
+        document: NormalizedDocument,
+        *,
+        file_bytes: bytes | None = None,
+        mime_type: str | None = None,
+    ) -> IntelligenceResult:
+        del file_bytes, mime_type
+        decision = self.classify(document)
+        schema_name = decision.document_type if decision.status == "supported" else "Other"
+        fields = self.extract(document, schema_name)
+        important = important_keys_for(schema_name, fields)
+        labels = {key: humanize_label(key) for key in important}
+        return IntelligenceResult(
+            decision=decision,
+            fields=fields,
+            important_keys=important,
+            field_labels=labels,
+        )

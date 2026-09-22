@@ -232,7 +232,7 @@ def extract_pdf_pages(path: Path) -> list[tuple[int, str]]:
     document = pymupdf.open(path)
     try:
         if getattr(document, "is_encrypted", False) and not document.authenticate(""):
-            raise ValueError("This PDF is password protected.")
+            raise ValueError("Password-protected PDFs are not supported.")
         return [(index, page.get_text() or "") for index, page in enumerate(document, start=1)]
     finally:
         document.close()
