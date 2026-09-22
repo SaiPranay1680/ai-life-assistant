@@ -82,11 +82,43 @@ def _item(
 
 def suggestions_for(document: Document, fields: dict[str, ExtractionField]) -> list[dict]:
     doc_type = (document.document_type or _value(fields, "documentType")).lower()
+<<<<<<< Updated upstream
     provider = _value(fields, "provider") or "this document"
     expiry_raw = _value(fields, "expiryDate")
     due = _iso_date(fields, "expiryDate")
     amount = _value(fields, "premium")
     identifier = _value(fields, "policyNumber")
+=======
+    expiry_raw = (
+        _value(fields, "expiryDate")
+        or _value(fields, "due_date")
+        or _value(fields, "expiry_date")
+        or _value(fields, "warranty_expiry")
+        or _value(fields, "warranty_end")
+    )
+    due = (
+        _iso_date(fields, "expiryDate")
+        or _iso_date(fields, "due_date")
+        or _iso_date(fields, "expiry_date")
+        or _iso_date(fields, "warranty_expiry")
+        or _iso_date(fields, "warranty_end")
+    )
+    amount = (
+        _value(fields, "premium")
+        or _value(fields, "amount_due")
+        or _value(fields, "total")
+    )
+    identifier = (
+        _value(fields, "policyNumber")
+        or _value(fields, "bill_number")
+        or _value(fields, "policy_number")
+        or _value(fields, "receipt_number")
+        or _value(fields, "serial_number")
+        or _value(fields, "service_number")
+        or _value(fields, "account_number")
+        or _value(fields, "customer_id")
+    )
+>>>>>>> Stashed changes
     filename = document.original_filename or "document"
 
     if "insurance" in doc_type and expiry_raw:

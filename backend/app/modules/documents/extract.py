@@ -78,6 +78,11 @@ def _ocr_engine():
 def extract_pdf_pages(path: Path) -> list[tuple[int, str]]:
     document = pymupdf.open(path)
     try:
+<<<<<<< Updated upstream
+=======
+        if getattr(document, "is_encrypted", False) and not document.authenticate(""):
+            raise ValueError("Password-protected PDFs are not supported.")
+>>>>>>> Stashed changes
         return [(index, page.get_text() or "") for index, page in enumerate(document, start=1)]
     finally:
         document.close()

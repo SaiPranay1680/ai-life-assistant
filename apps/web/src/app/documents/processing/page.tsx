@@ -75,6 +75,7 @@ function ProcessingContent() {
   });
 
   return (
+<<<<<<< Updated upstream
     <AppShell>
       <div className="mx-auto max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
         <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
@@ -84,12 +85,50 @@ function ProcessingContent() {
           We’re reading and organizing the important details.
         </h2>
         {error ? <p className="mt-4 text-sm text-rose-600">{error}</p> : null}
+=======
+    <div className="mx-auto max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 md:p-8">
+      <h2 className="break-words text-lg font-semibold text-slate-900">
+        {query.data?.original_filename || params.get("file") || "Document processing"}
+      </h2>
+      {!documentId ? (
+        <p role="alert" className="mt-4 text-sm text-rose-600">Missing document. Please upload the file again.</p>
+      ) : query.isError ? (
+        <div role="alert" className="mt-4 space-y-4">
+          <p className="text-sm text-rose-600">{query.error.message || "Unable to check document status."}</p>
+          <Button variant="secondary" onClick={() => void query.refetch()} disabled={query.isFetching}>
+            {query.isFetching ? "Checking..." : "Check status again"}
+          </Button>
+        </div>
+      ) : failed ? (
+        <p role="alert" className="mt-4 text-sm text-rose-600">
+          Unable to process this document. Try uploading another.
+        </p>
+      ) : rejected ? (
+        <div role="alert" className="mt-4 space-y-4">
+          <p className="text-sm text-rose-600">Invalid document. Try uploading another.</p>
+          <Link href="/documents/upload" className="text-sm font-medium text-blue-600 hover:underline">
+            Upload another
+          </Link>
+        </div>
+      ) : unknownStatus ? (
+        <p role="alert" className="mt-4 text-sm text-amber-700">Unable to process this document. Check it in Documents.</p>
+      ) : !query.data ? (
+        <p role="status" className="mt-4 text-sm text-slate-500">Checking document status...</p>
+      ) : (
+>>>>>>> Stashed changes
         <div className="mt-6">
           <ProgressStepper steps={steps} />
         </div>
+<<<<<<< Updated upstream
         <p className="mt-6 text-sm text-slate-400">
           You can continue using the app. We&apos;ll notify you when review is ready.
         </p>
+=======
+      )}
+      <div className="mt-6 flex gap-4 text-sm font-medium text-blue-600">
+        <Link href="/documents" className="hover:underline">Go to document vault</Link>
+        {!documentId || failed || rejected ? <Link href="/documents/upload" className="hover:underline">Upload another</Link> : null}
+>>>>>>> Stashed changes
       </div>
     </AppShell>
   );

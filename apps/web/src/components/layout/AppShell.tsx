@@ -13,20 +13,25 @@ const titles: Record<string, { title: string; subtitle?: string }> = {
     subtitle: "Here's what needs your attention today.",
   },
   "/documents/upload": {
-    title: "Upload a document",
+    title: "Smart Inbox",
     subtitle:
-      "Add a bill, insurance policy, receipt, warranty or other important document.",
+      "Upload a document, then review only what still needs your attention.",
   },
   "/documents/processing": {
     title: "Understanding your document",
   },
   "/documents/review": {
+<<<<<<< Updated upstream
     title: "Review extracted information",
     subtitle: "Please verify the important details before we create an action.",
+=======
+    title: "Review details",
+    subtitle: "Confirm the category and extracted information to continue.",
+>>>>>>> Stashed changes
   },
   "/documents": {
-    title: "Document vault",
-    subtitle: "All your important documents, organized and searchable.",
+    title: "Documents",
+    subtitle: "Browse files by category. Open a file to view it in a new tab.",
   },
   "/actions": {
     title: "Suggested action",
@@ -85,10 +90,10 @@ export function AppShell({
       : meta.title;
 
   return (
-    <div className="flex min-h-screen bg-[#f4f7fb]">
+    <div className="flex h-dvh overflow-hidden bg-[#f4f7fb]">
       <Sidebar open={open} onClose={() => setOpen(false)} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="px-4 py-6 md:px-8">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="shrink-0 px-4 py-6 md:px-8">
           <Header
             title={title}
             subtitle={meta.subtitle}
@@ -96,7 +101,7 @@ export function AppShell({
             onMenuClick={() => setOpen(true)}
           />
         </div>
-        <main className="flex-1 px-4 pb-8 md:px-8">{children}</main>
+        <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-8 md:px-8">{children}</main>
       </div>
     </div>
   );

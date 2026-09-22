@@ -11,3 +11,20 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
+
+.filename-scroll {
+  min-width: 0;
+  overflow-x: hidden;
+  white-space: nowrap;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.filename-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.filename-scroll:hover,
+.filename-scroll:focus-visible {
+  overflow-x: auto;
+}

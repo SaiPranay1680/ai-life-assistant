@@ -50,6 +50,8 @@ export type VaultDocument = {
   type: DocumentType;
   importantDate: string;
   status: DocumentStatus;
+  category: string;
+  subcategory: string;
 };
 
 export type TimelineEvent = {
@@ -67,6 +69,30 @@ export type ChatMessage = {
   sources?: string[];
 };
 
+<<<<<<< Updated upstream
+=======
+export type ExtractedValue = {
+  raw?: string | null;
+  normalized?: string | null;
+  confidence?: number | null;
+  evidence?: Array<{ page_number: number; snippet: string }>;
+};
+
+export type StructuredExtraction = {
+  document_type?: ExtractedValue | null;
+  [key: string]: ExtractedValue | ExtractedValue[] | null | undefined;
+};
+
+export type ExtractedField = {
+  name: string;
+  value: string;
+  evidence: string;
+  page: number;
+  confidence: number;
+  label?: string;
+};
+
+>>>>>>> Stashed changes
 export type ExtractedFields = {
   documentType: string;
   provider: string;
@@ -76,4 +102,15 @@ export type ExtractedFields = {
   premium: string;
   previewTitle: string;
   previewLines: string[];
+<<<<<<< Updated upstream
+=======
+  processingStatus?: string;
+  structuredExtraction?: StructuredExtraction | null;
+  purposeStatus?: string;
+  purposeReason?: string;
+  purposeCategory?: string;
+  folderCategory?: string;
+  folderSubcategory?: string;
+  fields?: ExtractedField[];
+>>>>>>> Stashed changes
 };

@@ -33,7 +33,7 @@ export default function DashboardPage() {
       ) : null}
       {actionsQuery.isError ? (
         <p className="text-sm text-rose-600">
-          {actionsQuery.error instanceof Error ? actionsQuery.error.message : "Could not load actions."}
+          {actionsQuery.error instanceof Error ? actionsQuery.error.message : "Unable to load actions."}
         </p>
       ) : null}
       <section className="grid gap-4 md:grid-cols-3">

@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     clamav_port: int = 3310
     clamav_required: bool = False
     clamav_timeout_seconds: int = 30
+    # Document intelligence. "gemini" uses the API key; "local" stays on regex extractors.
+    ai_provider: str = "gemini"
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
 
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env",

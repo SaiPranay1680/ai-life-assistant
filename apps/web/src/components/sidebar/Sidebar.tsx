@@ -60,7 +60,7 @@ export function Sidebar({
       ) : null}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-[#0b1b33] text-white transition-transform lg:static lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 flex h-dvh w-64 shrink-0 flex-col bg-[#0b1b33] text-white transition-transform lg:static lg:h-full lg:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -75,7 +75,7 @@ export function Sidebar({
             <X className="h-5 w-5" />
           </button>
         </div>
-        <nav className="mt-8 flex-1 space-y-1 px-3">
+        <nav className="mt-8 min-h-0 flex-1 space-y-1 overflow-y-auto px-3">
           {items.map((item) => {
             const active = isActive(pathname, item.href);
             const Icon = item.icon;
@@ -97,7 +97,7 @@ export function Sidebar({
             );
           })}
         </nav>
-        <div className="border-t border-white/10 px-6 py-5">
+        <div className="mt-auto shrink-0 border-t border-white/10 px-6 py-5">
           <p className="text-sm font-medium">{user?.name ?? "Guest"}</p>
           <p className="truncate text-xs text-slate-400">{user?.email}</p>
           {user ? (
