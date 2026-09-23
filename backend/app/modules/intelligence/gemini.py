@@ -29,16 +29,19 @@ _MAX_FILE_BYTES = 20 * 1024 * 1024
 
 UNDERSTAND_PROMPT = """You are the document intelligence engine for a personal AI life assistant.
 
-First understand the uploaded document (PDF, photo, or text).
-Determine its document type. Do not rely on a fixed closed list — choose a precise type such as electricity_bill, health_insurance_policy, product_warranty, tax_invoice, or unknown.
+First understand the uploaded document. It may be a native PDF or a photo/scan/screenshot of a document. A photo of a bill, policy, invoice, warranty, or ID is a valid document — set status to "supported".
+
+Determine its document type. Do not rely on a fixed closed list — choose a precise type such as electricity_bill, mobile_postpaid_bill, health_insurance_policy, product_warranty, tax_invoice, or unknown.
 
 Then identify ONLY information that would be important for the user to know, track, search, or take action on.
 
 Examples (these are EXAMPLES, not a complete list):
-- Electricity / utility bill: service/account number, amount payable, payment due date
+- Electricity / utility / mobile bill: service/account/mobile number, amount payable, payment due date
 - Insurance: policy number, premium, coverage, start date, expiry/renewal date
 - Invoice: invoice number, vendor, amount, invoice date, payment due date
 - Warranty: product, serial/model number, purchase date, warranty expiration
+
+Ignore watermarks such as "synthetic", "test document", or "not valid" when the file still contains real bill, policy, invoice, or identity fields. Still extract those fields and set status to "supported".
 
 For an unknown document type, still pick the few fields that matter to a person managing their life admin.
 Never invent a field the document does not support.
@@ -46,7 +49,7 @@ Do not extract the document title as a provider/insurer field.
 Never return the same fact twice under different keys (for example policy_number and policyNumber).
 Do not include names, full addresses, tariff tables, meter readings, tax breakdowns, or other noise unless that is the only identifier the user would need.
 
-If the file is not a useful personal document (photo, newspaper, screenshot, or placeholder text), set status to "rejected" and reason to "Invalid document. Try uploading another."
+Set status to "rejected" only when the file is not a life-admin document at all: a natural photo of people/scenery, a newspaper, empty/gibberish, or placeholder lorem ipsum. Do not reject a document because it is an image or a screenshot.
 Keep reason to one short professional sentence.
 
 Return JSON only.
@@ -177,11 +180,48 @@ def _contents(
     if excerpt:
         parts.append(f"Filename: {document.filename}\n\nExtracted text (may be incomplete):\n{excerpt[:_MAX_TEXT_CHARS]}")
     elif document.filename:
-        parts.append(f"Filename: {document.filename}\nThe file is attached. There is little or no extracted text.")
+        kind = "image" if document.is_image else "file"
+        parts.append(
+            f"Filename: {document.filename}\nThe {kind} is attached. Read the attached file even if there is little extracted text. "
+            "A photo or scan of a bill, policy, invoice, or ID is a valid document."
+        )
     parts.append(prompt)
     if len(parts) == 1:
         raise IntelligenceError("No document content was available for analysis.")
     return parts
+
+
+_ACTIONABLE_TYPES = {
+    "utility_bill",
+    "insurance",
+    "health_insurance",
+    "car_insurance",
+    "purchase_receipt",
+    "warranty",
+}
+_ACTIONABLE_TOKENS = (
+    "bill",
+    "invoice",
+    "receipt",
+    "policy",
+    "insurance",
+    "warranty",
+    "passport",
+    "aadhaar",
+    "aadhar",
+    "pan",
+    "licence",
+    "license",
+)
+
+
+def _looks_like_life_admin(model: UnderstandModel, mapped: str) -> bool:
+    if mapped in _ACTIONABLE_TYPES:
+        return True
+    hay = f"{model.document_type} {model.document_purpose}".lower()
+    if any(token in hay for token in _ACTIONABLE_TOKENS):
+        return True
+    return len(model.important_fields) >= 2
 
 
 def _purpose_from_understand(model: UnderstandModel) -> PurposeDecision:
@@ -192,6 +232,8 @@ def _purpose_from_understand(model: UnderstandModel) -> PurposeDecision:
         status = "unknown"
     if status == "supported" and mapped == "generic" and "unknown" in raw_type.lower():
         status = "unknown"
+    if status in {"unknown", "not_useful", "rejected"} and _looks_like_life_admin(model, mapped):
+        status = "supported"
     reason = user_facing_reason(status, (model.reason or model.document_purpose or "").strip())
     if not reason:
         reason = f"{raw_type.replace('_', ' ')} identified."

@@ -43,18 +43,43 @@ def _priority(action_type: str, due: date | None) -> str:
     return "low"
 
 
+def _looks_like_filename(value: str) -> bool:
+    lower = value.lower().strip()
+    return lower.endswith((".pdf", ".jpg", ".jpeg", ".png", ".webp"))
+
+
+def _record_label(doc_type: str, filename: str, provider: str = "") -> str:
+    hay = f"{doc_type} {filename} {provider}".lower()
+    for token, label in (
+        ("passport", "passport"),
+        ("aadhaar", "Aadhaar"),
+        ("aadhar", "Aadhaar"),
+        ("pan", "PAN"),
+        ("licen", "driving licence"),
+        ("invoice", "invoice"),
+        ("purchase", "purchase"),
+        ("receipt", "receipt"),
+        ("warranty", "warranty"),
+        ("insurance", "policy"),
+        ("policy", "policy"),
+        ("bill", "bill"),
+    ):
+        if token in hay:
+            return label
+    return "this document"
+
+
+def _subject(provider: str, doc_type: str, filename: str) -> str:
+    value = (provider or "").strip()
+    if value and value.lower() != "this document" and not _looks_like_filename(value):
+        return value
+    kind = _record_label(doc_type, filename, value)
+    return kind if kind == "this document" else f"this {kind}"
+
+
 def _evidence(document: Document, fields: dict[str, ExtractionField], field_name: str) -> str:
-    row = fields.get(field_name)
-    page = row.page_number if row and row.page_number else 1
-    filename = document.original_filename or "Document"
-    labels = {
-        "expiryDate": "Expiry Date",
-        "premium": "Amount",
-        "policyNumber": "Identifier",
-        "documentType": "Document type",
-    }
-    label = labels.get(field_name, field_name)
-    return f"Source: {filename} • {label} field • Page {page}"
+    del document, fields, field_name
+    return "From the details you confirmed."
 
 
 def _item(
@@ -112,6 +137,13 @@ def suggestions_for(document: Document, fields: dict[str, ExtractionField]) -> l
         or _value(fields, "customer_id")
     )
     filename = document.original_filename or "document"
+    provider = (
+        _value(fields, "provider")
+        or _value(fields, "merchant")
+        or _value(fields, "warranty_provider")
+        or "this document"
+    )
+    subject = _subject(provider, doc_type, filename)
     evidence_due = (
         "due_date"
         if _value(fields, "due_date")
@@ -122,21 +154,17 @@ def suggestions_for(document: Document, fields: dict[str, ExtractionField]) -> l
         else "expiryDate"
     )
     evidence_amount = "amount_due" if _value(fields, "amount_due") else "premium"
-    provider = (
-        _value(fields, "provider")
-        or _value(fields, "merchant")
-        or _value(fields, "warranty_provider")
-        or "this document"
-    )
 
     if "insurance" in doc_type and expiry_raw:
         return [
             _item(
                 "RENEW",
-                f"Renew {provider}",
+                f"Renew {subject}",
                 due,
                 _label(expiry_raw, due),
-                f"Your current policy expires on {expiry_raw}.",
+                f"Premium {amount} is due. Policy expires on {expiry_raw}."
+                if amount
+                else f"Your current policy expires on {expiry_raw}.",
                 _evidence(document, fields, "expiryDate"),
                 "Remind me 30 days before",
                 0.8,
@@ -153,7 +181,7 @@ def suggestions_for(document: Document, fields: dict[str, ExtractionField]) -> l
         return [
             _item(
                 "PAY",
-                f"Pay {provider}",
+                f"Pay {subject}",
                 due,
                 _label(expiry_raw, due) or "Due date not confirmed",
                 reason,
@@ -170,7 +198,7 @@ def suggestions_for(document: Document, fields: dict[str, ExtractionField]) -> l
         return [
             _item(
                 "PAY",
-                f"Pay {provider}",
+                f"Pay {subject}",
                 due,
                 _label(expiry_raw, due) or "Due date not confirmed",
                 reason,
@@ -189,7 +217,7 @@ def suggestions_for(document: Document, fields: dict[str, ExtractionField]) -> l
         return [
             _item(
                 "REVIEW",
-                f"Review {provider} warranty",
+                f"Review {subject} warranty",
                 due,
                 _label(expiry_raw, due) or "No expiry confirmed",
                 reason,
@@ -204,7 +232,7 @@ def suggestions_for(document: Document, fields: dict[str, ExtractionField]) -> l
             return [
                 _item(
                     "REGISTER",
-                    f"Register {provider} purchase",
+                    f"Register {subject} purchase",
                     due,
                     _label(expiry_raw, due),
                     f"Keep invoice {identifier} and register the purchase if required.",
@@ -216,7 +244,7 @@ def suggestions_for(document: Document, fields: dict[str, ExtractionField]) -> l
         return [
             _item(
                 "KEEP_FOR_RECORDS",
-                f"Keep {provider} purchase",
+                f"Keep {_record_label(doc_type, filename, provider)} on file",
                 None,
                 "",
                 "Store this purchase receipt for your records. No payment date was confirmed.",
@@ -230,7 +258,7 @@ def suggestions_for(document: Document, fields: dict[str, ExtractionField]) -> l
         return [
             _item(
                 "FOLLOW_UP",
-                f"Follow up on {provider}",
+                f"Follow up on {subject}",
                 due,
                 _label(expiry_raw, due),
                 f"A date of {expiry_raw} was confirmed on this document.",
@@ -243,7 +271,7 @@ def suggestions_for(document: Document, fields: dict[str, ExtractionField]) -> l
     return [
         _item(
             "KEEP_FOR_RECORDS",
-            f"Keep {filename}",
+            f"Keep {_record_label(doc_type, filename, provider)} on file",
             None,
             "",
             "Keep this important document on file. No due date was confirmed.",

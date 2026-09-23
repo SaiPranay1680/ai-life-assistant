@@ -27,7 +27,7 @@ LISTABLE_STATUSES = ("suggested", "confirmed", "in_progress", "completed")
 
 # Valid transitions: from_status → frozenset(to_status)
 TRANSITIONS: dict[str, frozenset[str]] = {
-    "suggested": frozenset({"confirmed", "dismissed"}),
+    "suggested": frozenset({"confirmed", "completed", "dismissed"}),
     "confirmed": frozenset({"in_progress", "completed", "dismissed"}),
     "in_progress": frozenset({"completed", "dismissed"}),
     "completed": frozenset(),

@@ -84,3 +84,14 @@ class DocumentIntelligenceTests(TestCase):
         decision = classify_document(_doc("hello", page_count=40))
         self.assertEqual(decision.status, "rejected")
         self.assertEqual(decision.category, "publication")
+
+    def test_mobile_postpaid_bill_image_text_is_supported(self) -> None:
+        text = """
+        MOBILE POSTPAID BILL
+        SYNTHETIC TEST DOCUMENT - NOT VALID
+        AMOUNT PAYABLE: INR 942.82
+        Due: 29/09/2026
+        """
+        decision = classify_document(_doc(text, is_image=True, filename="04_MOBILE_BILL_PHOTO.JPG"))
+        self.assertEqual(decision.status, "supported")
+        self.assertEqual(decision.document_type, "Bill")

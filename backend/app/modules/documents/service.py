@@ -640,6 +640,30 @@ async def process_document_pipeline(db: AsyncSession, document: Document) -> Non
                 filename=document.original_filename or "",
             )
 
+    if (
+        native_ai
+        and result is not None
+        and result.decision.status != "supported"
+        and not is_pdf
+        and document.storage_key
+    ):
+        try:
+            async with storage.open_for_read(document.storage_key, location="permanent") as path:
+                ocr_text = await asyncio.to_thread(ocr_image, path)
+            if len((ocr_text or "").strip()) >= 40:
+                pages = [(1, ocr_text)]
+                text = ocr_text
+                normalized = NormalizedDocument(
+                    pages=pages,
+                    is_pdf=False,
+                    is_image=True,
+                    page_count=1,
+                    filename=document.original_filename or "",
+                )
+                result = None
+        except Exception:
+            logger.exception("OCR fallback after an unclear image result failed.")
+
     if result is None:
         from dataclasses import replace
 

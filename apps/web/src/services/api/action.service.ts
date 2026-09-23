@@ -29,7 +29,7 @@ function apiError(error: unknown, fallback: string): Error {
 function toAction(row: ApiAction): ActionItem {
   return {
     id: row.id,
-    title: row.title,
+    title: humanActionTitle(row.title),
     dueLabel: row.due_label,
     dueDate: row.due_date,
     priority: row.priority,
@@ -64,12 +64,26 @@ export function toAttentionCard(action: ActionItem): AttentionCard {
   };
   return {
     id: action.id,
-    title: action.title,
+    title: humanActionTitle(action.title),
     badge: badges[action.actionType ?? ""] || "Action",
     badgeTone: action.priority === "high" ? "danger" : action.priority === "low" ? "success" : "warning",
     headline: action.reason,
-    meta: action.dueLabel && action.dueLabel !== "—" ? action.dueLabel : action.evidence || "From a confirmed document",
+    meta:
+      action.dueLabel && action.dueLabel !== "—"
+        ? action.dueLabel
+        : "No due date was confirmed",
   };
+}
+
+function humanActionTitle(title: string): string {
+  if (!/\.(pdf|jpe?g|png|webp)\b/i.test(title)) return title;
+  const lower = title.toLowerCase();
+  if (lower.includes("passport")) return "Keep passport on file";
+  if (lower.includes("invoice") || lower.includes("purchase") || lower.includes("receipt")) {
+    return "Keep invoice on file";
+  }
+  if (lower.includes("bill")) return "Keep bill on file";
+  return "Keep this document on file";
 }
 
 export async function getTimeline(): Promise<TimelineEvent[]> {

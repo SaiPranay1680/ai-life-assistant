@@ -262,3 +262,81 @@ class GeminiIntelligenceTests(TestCase):
         self.assertEqual(result.decision.status, "rejected")
         self.assertEqual(result.decision.reason, "Invalid document. Try uploading another.")
         self.assertEqual(client.calls, 0)
+
+    def test_photo_of_bill_is_supported_even_if_model_says_unknown(self) -> None:
+        client = FakeGeminiClient(
+            {
+                "document_type": "mobile_postpaid_bill",
+                "document_purpose": "Pay the mobile bill",
+                "status": "unknown",
+                "reason": "This is a photo.",
+                "confidence": 0.55,
+                "important_fields": [
+                    {"key": "amount_due", "label": "Amount Payable", "kind": "amount", "reason": ""},
+                    {"key": "due_date", "label": "Due Date", "kind": "date", "reason": ""},
+                    {"key": "mobile_number", "label": "Mobile", "kind": "id", "reason": ""},
+                ],
+            },
+            {
+                "fields": [
+                    {
+                        "key": "amount_due",
+                        "label": "Amount Payable",
+                        "value": "942.82",
+                        "normalized_value": "942.82",
+                        "currency": "INR",
+                        "confidence": 0.98,
+                        "evidence_text": "AMOUNT PAYABLE: INR 942.82",
+                        "evidence_page": 1,
+                    },
+                    {
+                        "key": "due_date",
+                        "label": "Due Date",
+                        "value": "29/09/2026",
+                        "normalized_value": "2026-09-30",
+                        "currency": "",
+                        "confidence": 0.96,
+                        "evidence_text": "Due: 29/09/2026",
+                        "evidence_page": 1,
+                    },
+                    {
+                        "key": "mobile_number",
+                        "label": "Mobile",
+                        "value": "+91 90000 00001",
+                        "normalized_value": "+91 90000 00001",
+                        "currency": "",
+                        "confidence": 0.9,
+                        "evidence_text": "Mobile: +91 90000 00001",
+                        "evidence_page": 1,
+                    },
+                ]
+            },
+        )
+        provider = GeminiIntelligenceProvider(client=client)
+        result = provider.analyze(
+            _doc(
+                "MOBILE POSTPAID BILL\nAMOUNT PAYABLE: INR 942.82\nDue: 29/09/2026",
+                is_image=True,
+            )
+        )
+        self.assertEqual(result.decision.status, "supported")
+        self.assertEqual(result.decision.document_type, "utility_bill")
+        self.assertEqual(result.fields["amount_due"].normalized, "942.82")
+        self.assertEqual(client.calls, 2)
+
+    def test_empty_photo_without_fields_stays_rejected(self) -> None:
+        client = FakeGeminiClient(
+            {
+                "document_type": "unknown",
+                "document_purpose": "",
+                "status": "rejected",
+                "reason": "Natural photo.",
+                "confidence": 0.9,
+                "important_fields": [],
+            },
+            {"fields": []},
+        )
+        provider = GeminiIntelligenceProvider(client=client)
+        result = provider.analyze(_doc("", is_image=True))
+        self.assertEqual(result.decision.status, "rejected")
+        self.assertEqual(client.calls, 1)

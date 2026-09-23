@@ -129,7 +129,9 @@ export function ActionCard({
       <div className="mt-5 rounded-xl bg-blue-50 p-4">
         <p className="text-sm font-semibold text-blue-800">Why this was suggested</p>
         <p className="mt-1 text-sm text-blue-900">
-          {action.evidence || "Suggested from the details you confirmed."}
+          {action.evidence && !/^source:/i.test(action.evidence)
+            ? action.evidence
+            : "Suggested from the details you confirmed."}
         </p>
         <p className="mt-2 text-xs text-slate-500">AI confidence: High</p>
       </div>

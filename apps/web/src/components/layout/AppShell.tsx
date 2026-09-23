@@ -42,7 +42,7 @@ const titles: Record<string, { title: string; subtitle?: string }> = {
   },
   "/timeline": {
     title: "Timeline",
-    subtitle: "Upcoming bills, renewals and reviews.",
+    subtitle: "This month's bills, renewals, and appointments. Mark paid when you settle them.",
   },
   "/settings": {
     title: "Settings",
