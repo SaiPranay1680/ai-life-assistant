@@ -38,6 +38,23 @@ class Settings(BaseSettings):
     ai_provider: str = "gemini"
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"
+    # OTP / rate limit settings
+    otp_expiry_minutes: int = 15
+    otp_max_attempts: int = 35
+    otp_request_limit: int = 35
+    otp_request_window_seconds: int = 60
+    otp_verify_limit: int = 10
+    otp_verify_window_seconds: int = 60
+    otp_resend_cooldown_seconds: int = 60
+    password_reset_token_minutes: int = 15
+    # SMTP settings for outbound email
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
+    smtp_from_name: str = ""
+    smtp_use_tls: bool = True
 
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env",
