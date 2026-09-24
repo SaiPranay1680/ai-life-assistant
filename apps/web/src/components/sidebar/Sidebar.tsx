@@ -6,6 +6,7 @@ import {
   Inbox,
   LayoutDashboard,
   ListChecks,
+  LogOut,
   MessageSquare,
   Settings,
   ShieldCheck,
@@ -107,13 +108,14 @@ export function Sidebar({
           {user ? (
             <button
               type="button"
-              className="mt-3 text-xs text-slate-400 hover:text-white hover:underline"
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/40 bg-red-600/15 px-3 py-2.5 text-sm font-semibold text-red-100 shadow-lg shadow-red-950/20 transition-all duration-200 hover:bg-red-600/25 hover:text-white hover:shadow-red-900/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
               onClick={() => {
                 logout();
                 onClose();
                 router.replace("/login");
               }}
             >
+              <LogOut className="h-4 w-4" />
               Sign out
             </button>
           ) : null}
