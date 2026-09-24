@@ -46,6 +46,11 @@ class StorageBackend(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def save_permanent_from_path(self, key: str, src_path: str) -> None:
+        """Save a local file at src_path into permanent storage under the logical key."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def cleanup_orphans(self, max_age_seconds: int) -> int:
         """Delete stale quarantine objects. Returns how many were removed."""
         raise NotImplementedError

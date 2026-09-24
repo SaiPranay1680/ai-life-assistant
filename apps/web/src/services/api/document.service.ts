@@ -87,7 +87,7 @@ export async function getDocuments(): Promise<VaultDocument[]> {
   }
 }
 
-export async function uploadDocument(file: File): Promise<{ fileName: string; id: string }> {
+export async function uploadDocument(file: File): Promise<{ fileName: string; id: string; status?: string }> {
   const allowed = ["application/pdf", "image/jpeg", "image/png", "image/jpg"];
   if (!allowed.includes(file.type) && !/\.(pdf|jpe?g|png)$/i.test(file.name)) {
     throw new Error("Only PDF, JPG or PNG files are allowed.");
@@ -102,12 +102,19 @@ export async function uploadDocument(file: File): Promise<{ fileName: string; id
   const body = new FormData();
   body.append("file", file);
   try {
-    const { data } = await apiClient.post<{ id: string; status: string; original_filename: string }>(
+    const { data } = await apiClient.post<{ id: string; status?: string; original_filename: string }>(
       "/documents",
       body,
     );
-    return { fileName: data.original_filename, id: data.id };
+    return { fileName: data.original_filename, id: data.id, status: data.status } as any;
   } catch (error) {
+    // If backend indicates PASSWORD_REQUIRED via status code / detail, surface that to caller.
+    if (axios.isAxiosError(error) && error.response?.status === 200) {
+      const d = error.response.data as any;
+      if (d) {
+        return { fileName: d.original_filename, id: d.id, status: d.status } as any;
+      }
+    }
     throw apiError(error, "Upload failed.");
   }
 }

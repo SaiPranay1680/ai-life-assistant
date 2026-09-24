@@ -397,10 +397,39 @@ async def upload_document(
             await reject_quarantine()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to read this PDF.") from None
         if encrypted:
-            await reject_quarantine()
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Password-protected PDFs are not supported.",
+            # Keep the uploaded encrypted PDF in permanent storage but mark it as
+            # PASSWORD_REQUIRED so the frontend can prompt the user for a password.
+            try:
+                await storage.promote(relative_key)
+            except Exception:
+                await reject_quarantine()
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to store this file.") from None
+            document = Document(
+                id=document_id,
+                workspace_id=user.workspace_id,
+                uploaded_by=user.id,
+                original_filename=filename,
+                extension=extension,
+                declared_mime=file.content_type,
+                detected_mime=detected_mime,
+                file_size=total_size,
+                sha256=digest,
+                storage_key=relative_key.replace("\\", "/"),
+                scan_status="clean",
+                processing_status="PASSWORD_REQUIRED",
+                page_count=page_count,
+            )
+            db.add(document)
+            try:
+                await db.commit()
+                await db.refresh(document)
+            except Exception:
+                await storage.delete_permanent(relative_key)
+                raise
+            return UploadResponse(
+                id=document.id,
+                status=document.processing_status or "PASSWORD_REQUIRED",
+                original_filename=filename,
             )
         if page_count > settings.max_pdf_pages:
             await reject_quarantine()
@@ -772,6 +801,103 @@ async def _replace_fields(
                 evidence_snippet=(hit.evidence or "")[:200],
             )
         )
+
+
+async def attempt_decrypt_and_process(db: AsyncSession, user: CurrentUser, document_id: UUID, password: str):
+    result = await db.execute(select(Document).where(Document.id == document_id, Document.workspace_id == user.workspace_id))
+    document = result.scalar_one_or_none()
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+    if not document.storage_key:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stored file not found.")
+    storage = get_storage()
+    # Process in a temporary file on the worker thread to avoid keeping password in memory longer than necessary.
+    # Rate-limit attempts per document to prevent brute-force. Use Redis if available.
+    from ...core.redis import get_redis
+
+    try:
+        redis = get_redis()
+    except Exception:
+        redis = None
+    try:
+        if redis is not None:
+            key = f"decrypt:attempts:{document_id}"
+            attempts = await redis.get(key)
+            attempts = int(attempts or 0)
+            if attempts >= 5:
+                raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many password attempts. Try again later.")
+            await redis.set(key, attempts + 1, ex=300)
+        async with storage.open_for_read(document.storage_key, location="permanent") as path:
+            # Attempt to decrypt using pypdf
+            from pypdf import PdfReader
+
+            # Be permissive when parsing PDFs that may have minor format issues.
+            try:
+                reader = await asyncio.to_thread(PdfReader, path, strict=False)
+            except TypeError:
+                # Older pypdf versions may not accept strict; fall back.
+                reader = await asyncio.to_thread(PdfReader, path)
+            if not getattr(reader, "is_encrypted", False):
+                # Already decrypted; just enqueue processing
+                from ...worker.tasks import process_document_task
+
+                document.processing_status = "queued"
+                await db.commit()
+                process_document_task.delay(str(document.id))
+                return {"status": "queued"}
+            try:
+                # pypdf's decrypt returns 0 on failure, 1 on success
+                ok = await asyncio.to_thread(reader.decrypt, password)
+            except Exception:
+                ok = 0
+            if not ok:
+                # remain in PASSWORD_REQUIRED
+                document.processing_status = "PASSWORD_REQUIRED"
+                await db.commit()
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid PDF password.")
+            # Create a temporary decrypted copy for processing
+            import tempfile
+
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+            try:
+                # write full decrypted PDF bytes to temp file
+                # pypdf provides write functionality via PdfWriter; reuse reader.pages
+                from pypdf import PdfWriter
+
+                writer = PdfWriter()
+                for p in reader.pages:
+                    writer.add_page(p)
+                with open(tmp.name, "wb") as out_f:
+                    await asyncio.to_thread(lambda: writer.write(out_f))
+                # Replace storage temporary path for processing: upload to permanent temp key
+                temp_key = f"workspaces/{document.workspace_id}/documents/{document.id}/decrypted.pdf"
+                await storage.save_permanent_from_path(temp_key, tmp.name)
+                # point document to decrypted temporary for processing
+                document.storage_key = temp_key
+                document.processing_status = "queued"
+                await db.commit()
+                from ...worker.tasks import process_document_task
+
+                # clear attempt counter on success
+                try:
+                    if redis is not None:
+                        await redis.delete(f"decrypt:attempts:{document_id}")
+                except Exception:
+                    pass
+                process_document_task.delay(str(document.id))
+                return {"status": "queued", "id": str(document.id)}
+            finally:
+                try:
+                    tmp.close()
+                except Exception:
+                    pass
+    except HTTPException:
+        raise
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Decrypt/process failed for document %s", document_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to decrypt or process PDF.")
 
 
 async def _rows_to_field_hits(rows: list) -> dict[str, FieldHit]:

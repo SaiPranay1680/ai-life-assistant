@@ -49,6 +49,14 @@ async def _run(document_id: str) -> str:
 
             await documents_service.process_document_pipeline(db, document)
             await db.refresh(document)
+            # If there is a decrypted temporary copy, remove it after processing
+            try:
+                storage = get_storage()
+                decrypted_key = f"workspaces/{document.workspace_id}/documents/{document.id}/decrypted.pdf"
+                if await storage.exists_permanent(decrypted_key):
+                    await storage.delete_permanent(decrypted_key)
+            except Exception:
+                pass
             return document.processing_status or "unknown"
     finally:
         await engine.dispose()

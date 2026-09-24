@@ -75,6 +75,11 @@ class LocalStorage(StorageBackend):
             raise FileNotFoundError("Stored object is missing.")
         return path, False
 
+    async def save_permanent_from_path(self, key: str, src_path: str) -> None:
+        dest = self._permanent_path(key)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(shutil.copyfile, src_path, str(dest))
+
     @asynccontextmanager
     async def open_for_read(self, key: str, *, location: str) -> AsyncIterator[Path]:
         path, is_temp = await self.materialize(key, location=location)

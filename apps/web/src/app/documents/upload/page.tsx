@@ -4,6 +4,8 @@ import { AppShell } from "@/components/layout/AppShell";
 import { NotificationCard } from "@/components/cards/AttentionCard";
 import { DocumentRow, DocumentTable, TablePagination } from "@/components/cards/DocumentTable";
 import { UploadBox } from "@/components/upload/UploadBox";
+import { Modal } from "@/components/ui/Modal";
+import { apiClient } from "@/services/api/client";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { deleteDocument, getDocuments, uploadDocument, viewDocumentFile } from "@/services/api/document.service";
@@ -19,6 +21,10 @@ const PAGE_SIZE = 5;
 export default function UploadPage() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+  const [passwordDocId, setPasswordDocId] = useState<string | null>(null);
+  const [passwordValue, setPasswordValue] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
@@ -48,11 +54,46 @@ export default function UploadPage() {
     setBusy(true);
     try {
       const result = await uploadDocument(file);
+      if (result.status === "PASSWORD_REQUIRED") {
+        setPasswordDocId(result.id);
+        setPasswordModalOpen(true);
+        return;
+      }
       router.push(
         `/documents/processing?id=${encodeURIComponent(result.id)}&file=${encodeURIComponent(result.fileName)}`,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitPassword() {
+    if (!passwordDocId) return;
+    setPasswordError(null);
+    setBusy(true);
+    try {
+      const { data, error } = await (async () => {
+        try {
+          const resp = await apiClient.post(`/documents/${encodeURIComponent(passwordDocId)}/decrypt`, { password: passwordValue });
+          return { data: resp.data };
+        } catch (e: unknown) {
+          return { error: e };
+        }
+      })();
+      if (error) {
+        const msg = (error as any)?.response?.data?.detail || "Unable to decrypt PDF. Please try again.";
+        setPasswordError(msg);
+        return;
+      }
+      setPasswordModalOpen(false);
+      setPasswordValue("");
+      setPasswordDocId(null);
+      // navigate to processing
+      router.push(`/documents/processing?id=${encodeURIComponent(data.id || passwordDocId)}&file=`);
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : "Unable to decrypt PDF.");
     } finally {
       setBusy(false);
     }
@@ -76,6 +117,26 @@ export default function UploadPage() {
   return (
     <AppShell>
       <UploadBox onFile={onFile} busy={busy} />
+      <Modal open={passwordModalOpen} title="Password required" onClose={() => setPasswordModalOpen(false)}>
+        <p className="text-sm text-slate-600">This PDF is password-protected. Enter the PDF password to continue.</p>
+        <label className="mt-3 block">
+          <input
+            type="password"
+            value={passwordValue}
+            onChange={(e) => setPasswordValue(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pr-3 pl-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 mt-2"
+          />
+        </label>
+        {passwordError ? <p className="mt-2 text-sm text-rose-600">{passwordError}</p> : null}
+        <div className="mt-4 flex justify-end">
+          <button className="btn btn-secondary mr-2" onClick={() => setPasswordModalOpen(false)} type="button">
+            Cancel
+          </button>
+          <button className="btn btn-primary" onClick={submitPassword} type="button" disabled={busy}>
+            Submit
+          </button>
+        </div>
+      </Modal>
       {error ? (
         <p role="alert" className="mt-3 text-sm text-rose-600">
           {error}

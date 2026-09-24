@@ -93,3 +93,22 @@ async def upload_document(
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
     )
+
+
+@router.post("/documents/{document_id}/decrypt")
+async def decrypt_document(
+    document_id: UUID,
+    payload: dict,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Attempt to decrypt a previously uploaded password-protected PDF.
+
+    Expects JSON: { "password": "..." }
+    """
+    password = payload.get("password")
+    if not password:
+        raise HTTPException(status_code=400, detail="Password is required.")
+    result = await service.attempt_decrypt_and_process(db, user, document_id, password)
+    # normalize response to include id and status
+    return {"id": str(document_id), "status": result.get("status") if isinstance(result, dict) else "queued"}

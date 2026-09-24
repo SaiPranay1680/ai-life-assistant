@@ -159,3 +159,8 @@ class S3Storage(StorageBackend):
             return removed
 
         return await asyncio.to_thread(_cleanup)
+
+    async def save_permanent_from_path(self, key: str, src_path: str) -> None:
+        # S3 is not configured in this environment. Raise to ensure callers
+        # don't attempt to use S3 for permanent saves until configured.
+        raise NotImplementedError("S3 save_permanent_from_path is not implemented in this environment")
