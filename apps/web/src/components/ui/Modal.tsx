@@ -8,11 +8,13 @@ export function Modal({
   title,
   children,
   onClose,
+  showClose = true,
 }: {
   open: boolean;
   title: string;
   children: ReactNode;
   onClose: () => void;
+  showClose?: boolean;
 }) {
   if (!open) return null;
 
@@ -21,11 +23,13 @@ export function Modal({
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
         <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
         <div className="mt-3 text-sm text-slate-600">{children}</div>
-        <div className="mt-5 flex justify-end">
-          <Button variant="secondary" onClick={onClose}>
-            Close
-          </Button>
-        </div>
+        {showClose ? (
+          <div className="mt-5 flex justify-end">
+            <Button variant="secondary" onClick={onClose}>
+              Close
+            </Button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

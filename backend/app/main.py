@@ -10,6 +10,7 @@ from .modules.actions.router import router as actions_router
 from .security.scanner import get_scanner
 from .modules.users.router import router as users_router
 from .modules.admin.router import router as admin_router
+from .modules.privacy.router import router as privacy_router
 
 app = FastAPI(title="AI Life Assistant - Backend")
 
@@ -27,6 +28,7 @@ app.include_router(documents_router)
 app.include_router(actions_router)
 app.include_router(users_router)
 app.include_router(admin_router)
+app.include_router(privacy_router)
 
 
 @app.get("/")

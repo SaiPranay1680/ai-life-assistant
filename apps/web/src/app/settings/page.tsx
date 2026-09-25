@@ -7,6 +7,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { deleteAccount } from "@/services/api/privacy.service";
 
 export default function SettingsPage() {
   const { user, logout } = useAuth();
@@ -16,6 +17,7 @@ export default function SettingsPage() {
   const [pushNotifications, setPushNotifications] = useState(false);
   const [dataSharing, setDataSharing] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   return (
     <AppShell>
@@ -29,14 +31,6 @@ export default function SettingsPage() {
         </section>
         <section className="rounded-2xl border border-slate-200 bg-white p-6">
           <h2 className="text-lg font-semibold">Privacy</h2>
-          <label className="mt-4 flex items-center justify-between gap-4 text-sm">
-            Data sharing for product improvement
-            <input
-              type="checkbox"
-              checked={dataSharing}
-              onChange={(event) => setDataSharing(event.target.checked)}
-            />
-          </label>
           <Button
             variant="danger"
             className="mt-5"
@@ -78,9 +72,33 @@ export default function SettingsPage() {
         open={deleteOpen}
         title="Delete account"
         onClose={() => setDeleteOpen(false)}
+        showClose={false}
       >
-        Account deletion will be available when the backend privacy APIs are connected.
-        No personal data is removed from this mock environment.
+        <div className="space-y-4">
+          <p>Deleting your account will permanently remove your personal data and workspace. This action cannot be undone.</p>
+          <div className="flex gap-2 justify-end">
+            <Button variant="secondary" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+            <Button
+              variant="danger"
+              onClick={async () => {
+                if (!confirm('Are you sure you want to delete your account? This cannot be undone.')) return;
+                setDeleting(true);
+                try {
+                  await deleteAccount();
+                  logout();
+                  router.replace('/login');
+                } catch (err) {
+                  // eslint-disable-next-line no-console
+                  console.error('Delete failed', err);
+                  setDeleting(false);
+                }
+              }}
+              disabled={deleting}
+            >
+              {deleting ? 'Deleting…' : 'Delete account'}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </AppShell>
   );
