@@ -1,0 +1,43 @@
+{
+  "document_type": "utility_bill",
+  "fields": {
+    "provider": {
+      "normalized": "Bengaluru Power & Light Services",
+      "page": 1,
+      "evidence_contains": "Bengaluru Power"
+    },
+    "bill_number": {
+      "normalized": "BPL-2026-091842",
+      "page": 1
+    },
+    "customer_id": {
+      "normalized": "CUST-458921",
+      "page": 1
+    },
+    "billing_period_start": {
+      "normalized": "2026-08-01",
+      "page": 1
+    },
+    "billing_period_end": {
+      "normalized": "2026-08-31",
+      "page": 1
+    },
+    "due_date": {
+      "normalized": "2026-09-15",
+      "page": 1,
+      "evidence_contains": "15 Sep 2026"
+    },
+    "amount_due": {
+      "normalized": "1245.00",
+      "page": 1,
+      "evidence_contains": "1,245"
+    },
+    "service_address": {
+      "normalized": "42 Example Road, Bengaluru, Karnataka",
+      "page": 1
+    }
+  },
+  "expected_actions": [
+    { "action_type": "PAY" }
+  ]
+}

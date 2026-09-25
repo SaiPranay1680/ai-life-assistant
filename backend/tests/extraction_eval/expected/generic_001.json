@@ -1,0 +1,20 @@
+{
+  "document_type": "generic",
+  "fields": {
+    "title": {
+      "normalized": "PASSPORT",
+      "page": 1
+    },
+    "provider": {
+      "normalized": "Republic of Example",
+      "page": 1
+    },
+    "document_date": {
+      "normalized": "2024-01-10",
+      "page": 1
+    }
+  },
+  "expected_actions": [
+    { "action_type": "FOLLOW_UP" }
+  ]
+}

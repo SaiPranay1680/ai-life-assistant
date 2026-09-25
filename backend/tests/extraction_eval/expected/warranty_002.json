@@ -1,0 +1,40 @@
+{
+  "document_type": "warranty",
+  "fields": {
+    "product": {
+      "normalized": "NoiseBuds Pro",
+      "page": 1
+    },
+    "model": {
+      "normalized": "NB-P-11",
+      "page": 1
+    },
+    "serial_number": {
+      "normalized": "NB11-445566",
+      "page": 1
+    },
+    "warranty_provider": {
+      "normalized": "SoundWave Retail",
+      "page": 1
+    },
+    "purchase_date": {
+      "normalized": "2026-02-01",
+      "page": 1
+    },
+    "warranty_start": {
+      "normalized": "2026-02-01",
+      "page": 1
+    },
+    "warranty_expiry": {
+      "normalized": "2027-02-01",
+      "page": 1
+    },
+    "warranty_duration": {
+      "normalized": "12 months",
+      "page": 1
+    }
+  },
+  "expected_actions": [
+    { "action_type": "REVIEW" }
+  ]
+}

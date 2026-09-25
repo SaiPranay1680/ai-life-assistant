@@ -1,6 +1,6 @@
 import re
 
-from ..documents.text import DATE_TOKEN, FieldHit, empty_field, normalize_amount, normalize_date
+from ..documents.text import DATE_TOKEN, FieldHit, empty_field, find_amount_match, normalize_amount, normalize_date
 from .important import humanize_label, important_keys_for
 from .schemas import SCHEMA_FIELDS
 from .types import (
@@ -62,10 +62,6 @@ CATEGORY_SIGNALS: dict[str, tuple[str, ...]] = {
     "Important document": ("passport", "driving licence", "driving license", "aadhaar", "pan card"),
 }
 
-AMOUNT_RE = re.compile(
-    r"(?:₹|\u20b9|rs\.?|inr)?\s*([0-9]{1,3}(?:,[0-9]{2})*,[0-9]{3}(?:\.[0-9]{1,2})?|[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)",
-    re.IGNORECASE,
-)
 ID_RE = re.compile(r"[A-Z0-9][A-Z0-9\-\/]{4,}")
 
 
@@ -189,7 +185,7 @@ def _hit_from_window(window: str, kind: str, page: int) -> FieldHit | None:
         raw = found.group(1)
         return FieldHit(raw, normalize_date(raw), 0.86, window.strip()[:200], page)
     if kind == "amount":
-        found = AMOUNT_RE.search(window)
+        found = find_amount_match(window)
         if not found:
             return None
         raw = found.group(0).strip()

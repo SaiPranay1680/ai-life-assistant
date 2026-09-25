@@ -11,8 +11,11 @@ from .text import (
     CURRENCY_PREFIX,
     DATE_TOKEN,
     FieldHit,
+    _RUPEE_LIKE_PREFIX_RE,
     canonicalize_amount_raw,
     empty_field,
+    find_amount_match,
+    focused_amount_evidence,
     normalize_amount,
     normalize_date,
 )
@@ -98,7 +101,7 @@ WARRANTY_DURATION_RE = re.compile(
     re.IGNORECASE,
 )
 CURRENCY_RE = re.compile(
-    r"(₹|\u20b9|\bINR\b|\bUSD\b|\$|\bEUR\b|€|(?<![A-Za-z0-9])[Il1](?=\d))",
+    r"(₹|\u20b9|\bINR\b|\bUSD\b|\$|\bEUR\b|€|(?<![A-Za-z0-9])[Il](?=\d))",
     re.IGNORECASE,
 )
 
@@ -287,7 +290,8 @@ def read_document_pages(path: Path, is_pdf: bool) -> list[tuple[int, str]]:
 def _amount_hit(raw_match: str, confidence: float, evidence: str, page: int) -> FieldHit:
     """Build an amount FieldHit with INR-spaced raw and numeric normalized value."""
     display_raw = canonicalize_amount_raw(raw_match)
-    return FieldHit(display_raw, normalize_amount(display_raw or raw_match), confidence, evidence[:200], page)
+    focused = focused_amount_evidence(evidence, display_raw or raw_match)
+    return FieldHit(display_raw, normalize_amount(display_raw or raw_match), confidence, focused, page)
 
 
 def _date_near(pages: list[tuple[int, str]], labels: tuple[str, ...]) -> FieldHit:
@@ -304,12 +308,23 @@ def _date_near(pages: list[tuple[int, str]], labels: tuple[str, ...]) -> FieldHi
 
 
 def _amount_near(pages: list[tuple[int, str]], labels: tuple[str, ...]) -> FieldHit:
+    """
+    Find an amount near a semantic label.
+
+    Prefer same-line / next-line layout (table OCR), then a short window after the label.
+    Never accept bare calendar years (2025/2026/…) as money.
+    """
+    # Line-oriented pass first (more reliable for OCR reading-order noise).
+    labeled = _exact_label_amount(pages, labels)
+    if labeled.raw:
+        return labeled
+
     for label in labels:
         for page_number, text in pages:
             match = re.search(label + r".{0,80}", text, flags=re.IGNORECASE | re.DOTALL)
             if not match:
                 continue
-            found = AMOUNT_RE.search(match.group(0))
+            found = find_amount_match(match.group(0))
             if found:
                 return _amount_hit(found.group(0).strip(), 0.8, match.group(0), page_number)
     return empty_field()
@@ -393,7 +408,7 @@ def _guess_currency(pages: list[tuple[int, str]]) -> FieldHit:
     if match:
         raw = match.group(0)
         token = raw.upper()
-        if token in ("₹", "RS", "RS.", "INR") or re.fullmatch(r"[IL1]", raw, flags=re.IGNORECASE):
+        if token in ("₹", "RS", "RS.", "INR") or re.fullmatch(r"[IL]", raw, flags=re.IGNORECASE):
             return FieldHit("INR", "INR", 0.75, match.group(0), page)
         if token in ("$", "USD"):
             return FieldHit(raw, "USD", 0.7, match.group(0), page)
@@ -402,9 +417,10 @@ def _guess_currency(pages: list[tuple[int, str]]) -> FieldHit:
         normalized = token.replace("₹", "INR")
         return FieldHit(raw, normalized, 0.7, match.group(0), page)
     # Fallback: amount lines that used an OCR rupee prefix imply INR.
-    amount_match, amount_page = _first_match(pages, AMOUNT_RE)
-    if amount_match and _RUPEE_LIKE_PREFIX_RE.search(amount_match.group(0)):
-        return FieldHit("INR", "INR", 0.65, amount_match.group(0)[:200], amount_page)
+    for page_number, text in pages:
+        amount_match = find_amount_match(text)
+        if amount_match and _RUPEE_LIKE_PREFIX_RE.search(amount_match.group(0)):
+            return FieldHit("INR", "INR", 0.65, amount_match.group(0)[:200], page_number)
     return empty_field()
 
 
@@ -450,8 +466,23 @@ def extract_utility_bill(pages: list[tuple[int, str]]) -> dict[str, FieldHit]:
             ("billing period end", "period to", "to date", "service to"),
         )
 
-    due = _date_near(pages, ("due date", "payment due", "pay by", "due on"))
-    amount_due = _amount_near(pages, ("amount due", "total due", "balance due", "amount payable"))
+    due = _date_near(
+        pages,
+        ("due date", "pay before", "payment due", "pay by", "due on", "last date to pay"),
+    )
+    amount_due = _amount_near(
+        pages,
+        (
+            "amount due",
+            "amount to pay",
+            "net amount payable",
+            "amount payable",
+            "balance due",
+            "bill amount",
+            "total due",
+            "total",
+        ),
+    )
     # Do not invent amount from any random currency figure on the page.
 
     addr_match, addr_page = _first_match(pages, SERVICE_ADDRESS_RE)
@@ -495,6 +526,7 @@ def extract_insurance(pages: list[tuple[int, str]]) -> dict[str, FieldHit]:
     effective = _date_near(
         pages,
         (
+            "policy start date",
             "policy start",
             "effective date",
             "start date",
@@ -507,6 +539,8 @@ def extract_insurance(pages: list[tuple[int, str]]) -> dict[str, FieldHit]:
     expiry = _date_near(
         pages,
         (
+            "policy end date",
+            "policy end",
             "policy expiry",
             "expiry date",
             "end date",
@@ -521,20 +555,36 @@ def extract_insurance(pages: list[tuple[int, str]]) -> dict[str, FieldHit]:
         effective = dated[0]
     if not expiry.raw and dated:
         expiry = dated[-1] if len(dated) > 1 else dated[0]
-    premium = _amount_near(pages, ("premium", "total premium", "amount payable"))
-    if not premium.raw:
-        amount_match, amount_page = _first_match(pages, AMOUNT_RE)
-        if amount_match:
-            premium = _amount_hit(amount_match.group(0).strip(), 0.55, amount_match.group(0), amount_page)
+    premium = _amount_near(
+        pages,
+        (
+            "annual premium",
+            "policy premium",
+            "renewal premium",
+            "total premium",
+            "premium",
+        ),
+    )
+    # Do not invent premium from unrelated page amounts (e.g. sum insured).
+    coverage = _amount_near(
+        pages,
+        (
+            "sum insured",
+            "sum assured",
+            "coverage amount",
+            "insured amount",
+            "cover amount",
+        ),
+    )
     return {
         "provider": _guess_provider(pages, hint="insurance"),
         "policy_number": policy,
-        "policy_holder": _text_near(pages, ("policy holder", "insured", "insured name", "name of insured")),
+        "policy_holder": _text_near(pages, ("policy holder", "insured name", "name of insured")),
         "effective_date": effective,
         "expiry_date": expiry,
         "premium": premium,
         "deductible": _amount_near(pages, ("deductible", "excess")),
-        "coverage": _text_near(pages, ("coverage", "sum insured", "cover type")),
+        "coverage": coverage,
         "currency": _guess_currency(pages),
     }
 
@@ -548,7 +598,7 @@ def _extract_receipt_items(pages: list[tuple[int, str]]) -> list[dict]:
             qty_raw = match.group(2).strip()
             amount_raw = match.group(3).strip()
             # Full match tail may include OCR "I" prefix — prefer that for display.
-            amount_match = AMOUNT_RE.search(match.group(0))
+            amount_match = find_amount_match(match.group(0))
             amount_source = amount_match.group(0).strip() if amount_match else amount_raw
             display_raw = canonicalize_amount_raw(amount_source)
             amount_norm = normalize_amount(display_raw)
@@ -591,6 +641,8 @@ def _exact_label_amount(pages: list[tuple[int, str]], labels: tuple[str, ...]) -
 
     Tolerates OCR where ₹ is rendered as I/l/1 immediately before digits.
     Avoids matching 'Subtotal' when searching for 'Total'.
+    Skips bare years and date-only following lines so "Amount Due\\n15 Oct 2026"
+    does not become amount=2026.
     """
     for label in labels:
         same_line = re.compile(
@@ -607,28 +659,33 @@ def _exact_label_amount(pages: list[tuple[int, str]], labels: tuple[str, ...]) -
                 found = same_line.match(line)
                 if found:
                     tail = found.group(1).strip()
-                    amount = AMOUNT_RE.search(tail) if tail else None
+                    amount = find_amount_match(tail) if tail else None
                     if amount:
                         return _amount_hit(amount.group(0).strip(), 0.9, line.strip(), page_number)
-                    # Table layout: label on this line, amount on the next non-empty line.
-                    for next_line in lines[index + 1 : index + 4]:
+                    # Table layout: label on this line, amount on a following line.
+                    for next_line in lines[index + 1 : index + 6]:
                         candidate = next_line.strip()
                         if not candidate:
                             continue
-                        amount = AMOUNT_RE.search(candidate)
+                        amount = find_amount_match(candidate)
                         if amount:
                             snippet = f"{line.strip()} {candidate}"
                             return _amount_hit(amount.group(0).strip(), 0.88, snippet, page_number)
+                        # Skip date-only / year-only noise; keep scanning nearby lines.
+                        if DATE_TOKEN.search(candidate) or re.fullmatch(r"(?:19|20)\d{2}", candidate):
+                            continue
                         break
                 elif label_only.match(line):
-                    for next_line in lines[index + 1 : index + 4]:
+                    for next_line in lines[index + 1 : index + 6]:
                         candidate = next_line.strip()
                         if not candidate:
                             continue
-                        amount = AMOUNT_RE.search(candidate)
+                        amount = find_amount_match(candidate)
                         if amount:
                             snippet = f"{line.strip()} {candidate}"
                             return _amount_hit(amount.group(0).strip(), 0.88, snippet, page_number)
+                        if DATE_TOKEN.search(candidate) or re.fullmatch(r"(?:19|20)\d{2}", candidate):
+                            continue
                         break
     return empty_field()
 
@@ -658,8 +715,10 @@ def extract_purchase_receipt(pages: list[tuple[int, str]]) -> dict[str, FieldHit
 
     purchase_date = _date_near(
         pages,
-        ("purchase date", "transaction date", "date of purchase", "invoice date", "receipt date"),
+        ("purchase date", "date of purchase", "invoice date", "receipt date"),
     )
+    # Only emit transaction_date when the document actually labels one — never alias purchase_date.
+    transaction_date = _date_near(pages, ("transaction date",))
     # Do not invent a date from unrelated tokens if labeled date is missing.
 
     subtotal = _exact_label_amount(pages, ("subtotal", "sub total", "sub-total"))
@@ -686,7 +745,7 @@ def extract_purchase_receipt(pages: list[tuple[int, str]]) -> dict[str, FieldHit
         "merchant": merchant,
         "receipt_number": receipt_number,
         "purchase_date": purchase_date,
-        "transaction_date": purchase_date,  # alias for older schema consumers
+        "transaction_date": transaction_date,
         "items": items_hit,
         "subtotal": subtotal,
         "tax": tax,

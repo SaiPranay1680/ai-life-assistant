@@ -45,7 +45,7 @@ def _priority(action_type: str, due: date | None) -> str:
 
 def _looks_like_filename(value: str) -> bool:
     lower = value.lower().strip()
-    return lower.endswith((".pdf", ".jpg", ".jpeg", ".png", ".webp"))
+    return lower.endswith((".pdf", ".jpg", ".jpeg", ".png", ".webp", ".docx"))
 
 
 def _record_label(doc_type: str, filename: str, provider: str = "") -> str:

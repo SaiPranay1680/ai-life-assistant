@@ -1,0 +1,33 @@
+{
+  "document_type": "car_insurance",
+  "fields": {
+    "provider": {
+      "normalized": "RoadShield Motors",
+      "page": 1
+    },
+    "policy_number": {
+      "normalized": "CAR-9911-XX",
+      "page": 1
+    },
+    "policy_holder": {
+      "normalized": "Eval Driver",
+      "page": 1
+    },
+    "effective_date": {
+      "normalized": "2026-03-05",
+      "page": 1
+    },
+    "expiry_date": {
+      "normalized": "2027-03-04",
+      "page": 1
+    },
+    "premium": {
+      "normalized": "12500.00",
+      "page": 1,
+      "evidence_contains": "12,500"
+    }
+  },
+  "expected_actions": [
+    { "action_type": "RENEW" }
+  ]
+}

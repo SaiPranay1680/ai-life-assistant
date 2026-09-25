@@ -1,0 +1,33 @@
+{
+  "document_type": "health_insurance",
+  "fields": {
+    "provider": {
+      "normalized": "SecureCare Insurance",
+      "page": 1
+    },
+    "policy_number": {
+      "normalized": "SCI-HLTH-2026-778812",
+      "page": 1
+    },
+    "policy_holder": {
+      "normalized": "Test Customer",
+      "page": 1
+    },
+    "effective_date": {
+      "normalized": "2026-09-01",
+      "page": 1
+    },
+    "expiry_date": {
+      "normalized": "2027-08-31",
+      "page": 1
+    },
+    "premium": {
+      "normalized": "18500.00",
+      "page": 1,
+      "evidence_contains": "18,500"
+    }
+  },
+  "expected_actions": [
+    { "action_type": "RENEW" }
+  ]
+}

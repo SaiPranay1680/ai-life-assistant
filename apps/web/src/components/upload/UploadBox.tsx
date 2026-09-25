@@ -4,7 +4,8 @@ import { CloudUpload } from "lucide-react";
 import { useCallback, useRef, useState, type DragEvent } from "react";
 import { Button } from "@/components/ui/Button";
 
-const ACCEPT = ".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png";
+const ACCEPT =
+  ".pdf,.jpg,.jpeg,.png,.docx,application/pdf,image/jpeg,image/png,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 export function UploadBox({
   onFile,
@@ -65,7 +66,7 @@ export function UploadBox({
         Drag & drop your document here
       </p>
       <p id="upload-hint" className="mt-2 text-sm text-slate-500">
-        PDF, JPG or PNG • PDFs up to 20 MB / 30 pages • images up to 10 MB
+        PDF, JPG, JPEG, PNG or DOCX • PDFs up to 20 MB / 30 pages • images up to 10 MB
       </p>
       <input
         ref={inputRef}

@@ -3,6 +3,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from .docx_extract import DOCX_MIME, looks_like_docx_bytes
 from .schemas import (
     GenericExtraction,
     InsuranceExtraction,
@@ -12,16 +13,18 @@ from .schemas import (
     WarrantyExtraction,
 )
 
-ALLOWED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png"}
+ALLOWED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".docx"}
 ALLOWED_MIME_TYPES = {
     "application/pdf",
     "image/jpeg",
     "image/png",
+    DOCX_MIME,
 }
 MIME_EXTENSION_MAP = {
     "application/pdf": {".pdf"},
     "image/jpeg": {".jpg", ".jpeg"},
     "image/png": {".png"},
+    DOCX_MIME: {".docx"},
 }
 
 EXTRACTION_SCHEMA_REGISTRY: dict[str, type[StructuredExtraction]] = {
@@ -40,7 +43,7 @@ def safe_filename(filename: str | None) -> str:
 def validate_extension(filename: str) -> str:
     extension = Path(filename).suffix.lower()
     if extension not in ALLOWED_EXTENSIONS:
-        raise ValueError("Only PDF, JPG or PNG files are allowed.")
+        raise ValueError("Only PDF, JPG, PNG or DOCX files are allowed.")
     return extension
 
 
@@ -51,6 +54,8 @@ def detect_mime(data: bytes) -> str:
         return "image/jpeg"
     if data.startswith(b"\x89PNG\r\n\x1a\n"):
         return "image/png"
+    if looks_like_docx_bytes(data):
+        return DOCX_MIME
     return "application/octet-stream"
 
 

@@ -88,9 +88,15 @@ export async function getDocuments(): Promise<VaultDocument[]> {
 }
 
 export async function uploadDocument(file: File): Promise<{ fileName: string; id: string; status?: string }> {
-  const allowed = ["application/pdf", "image/jpeg", "image/png", "image/jpg"];
-  if (!allowed.includes(file.type) && !/\.(pdf|jpe?g|png)$/i.test(file.name)) {
-    throw new Error("Only PDF, JPG or PNG files are allowed.");
+  const allowed = [
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+    "image/jpg",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ];
+  if (!allowed.includes(file.type) && !/\.(pdf|jpe?g|png|docx)$/i.test(file.name)) {
+    throw new Error("Only PDF, JPG, JPEG, PNG or DOCX files are allowed.");
   }
   if (file.size > 20 * 1024 * 1024) {
     throw new Error("File must be 20 MB or smaller.");

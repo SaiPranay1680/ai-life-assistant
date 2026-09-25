@@ -40,6 +40,7 @@ from .extract import (
     read_document_pages,
     schema_document_type,
 )
+from .docx_extract import DOCX_MIME, DocxExtractionError, extract_docx_pages, validate_docx_file
 from .folders import (
     FOLDER_CATEGORY_FIELD,
     FOLDER_FIELD_NAMES,
@@ -298,8 +299,8 @@ async def upload_document(
                     status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                     detail="Images must be 10 MB or smaller." if extension in IMAGE_EXTENSIONS else "File must be 20 MB or smaller.",
                 )
-            if len(first_bytes) < 16:
-                first_bytes += chunk[:16]
+            if len(first_bytes) < 8192:
+                first_bytes += chunk[: 8192 - len(first_bytes)]
             sha256.update(chunk)
             yield chunk
 
@@ -327,7 +328,15 @@ async def upload_document(
 
     detected_mime = detect_mime(first_bytes)
     try:
+        if extension == ".docx":
+            # Container validation — do not trust extension / declared MIME alone.
+            async with storage.open_for_read(relative_key, location="quarantine") as quarantine_path:
+                validate_docx_file(quarantine_path)
+            detected_mime = DOCX_MIME
         validate_file_type(extension, detected_mime)
+    except DocxExtractionError as exc:
+        await reject_quarantine()
+        raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail=str(exc)) from exc
     except ValueError as exc:
         await reject_quarantine()
         raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail=str(exc)) from exc
@@ -568,9 +577,13 @@ def _document_mime(document: Document, is_pdf: bool) -> str:
     extension = (document.extension or "").lower()
     if is_pdf or extension == ".pdf":
         return "application/pdf"
+    if extension == ".docx":
+        return DOCX_MIME
     if extension == ".png":
         return "image/png"
-    return "image/jpeg"
+    if extension in {".jpg", ".jpeg"}:
+        return "image/jpeg"
+    return "application/octet-stream"
 
 
 def _empty_supported_fields(document_type: str) -> dict[str, FieldHit]:
@@ -609,6 +622,7 @@ async def process_document_pipeline(db: AsyncSession, document: Document) -> Non
 
     extension = (document.extension or "").lower()
     is_pdf = extension == ".pdf" or (document.detected_mime == "application/pdf")
+    is_docx = extension == ".docx" or (document.detected_mime == DOCX_MIME)
     provider = get_provider()
     native_ai = bool(getattr(provider, "supports_native_files", False))
 
@@ -619,10 +633,16 @@ async def process_document_pipeline(db: AsyncSession, document: Document) -> Non
             file_bytes = await asyncio.to_thread(path.read_bytes)
             if is_pdf:
                 pages = await asyncio.to_thread(extract_pdf_pages, path)
+            elif is_docx:
+                pages = await asyncio.to_thread(extract_docx_pages, path)
             elif native_ai:
                 pages = [(1, "")]
             else:
                 pages = await asyncio.to_thread(read_document_pages, path, False)
+    except DocxExtractionError:
+        document.processing_status = "failed"
+        await db.commit()
+        return
     except Exception:
         document.processing_status = "failed"
         await db.commit()
@@ -633,7 +653,7 @@ async def process_document_pipeline(db: AsyncSession, document: Document) -> Non
     normalized = NormalizedDocument(
         pages=pages or [(1, "")],
         is_pdf=is_pdf,
-        is_image=not is_pdf,
+        is_image=not is_pdf and not is_docx,
         page_count=document.page_count,
         filename=document.original_filename or "",
     )
@@ -653,7 +673,7 @@ async def process_document_pipeline(db: AsyncSession, document: Document) -> Non
                         pages = await asyncio.to_thread(ocr_pdf_pages, path)
                 except Exception:
                     pages = pages or [(1, "")]
-            elif not is_pdf:
+            elif not is_pdf and not is_docx:
                 try:
                     async with storage.open_for_read(document.storage_key, location="permanent") as path:
                         ocr_text = await asyncio.to_thread(ocr_image, path)
@@ -664,7 +684,7 @@ async def process_document_pipeline(db: AsyncSession, document: Document) -> Non
             normalized = NormalizedDocument(
                 pages=pages or [(1, "")],
                 is_pdf=is_pdf,
-                is_image=not is_pdf,
+                is_image=not is_pdf and not is_docx,
                 page_count=document.page_count or len(pages) or 1,
                 filename=document.original_filename or "",
             )
@@ -674,6 +694,7 @@ async def process_document_pipeline(db: AsyncSession, document: Document) -> Non
         and result is not None
         and result.decision.status != "supported"
         and not is_pdf
+        and not is_docx
         and document.storage_key
     ):
         try:

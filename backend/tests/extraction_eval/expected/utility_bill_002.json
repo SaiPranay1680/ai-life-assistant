@@ -1,0 +1,36 @@
+{
+  "document_type": "utility_bill",
+  "fields": {
+    "provider": {
+      "normalized": "Mysore Metro Power Co",
+      "page": 1
+    },
+    "bill_number": {
+      "normalized": "MMP-77821",
+      "page": 1
+    },
+    "billing_period_start": {
+      "normalized": "2026-09-01",
+      "page": 1
+    },
+    "billing_period_end": {
+      "normalized": "2026-09-30",
+      "page": 1
+    },
+    "due_date": {
+      "normalized": "2026-10-12",
+      "page": 1
+    },
+    "amount_due": {
+      "normalized": "980.50",
+      "page": 1
+    },
+    "service_address": {
+      "normalized": "9 Lake View, Mysuru",
+      "page": 1
+    }
+  },
+  "expected_actions": [
+    { "action_type": "PAY" }
+  ]
+}

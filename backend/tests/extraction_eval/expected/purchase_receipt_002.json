@@ -1,0 +1,34 @@
+{
+  "document_type": "purchase_receipt",
+  "fields": {
+    "merchant": {
+      "normalized": "ElectroMart Retail",
+      "page": 1
+    },
+    "receipt_number": {
+      "normalized": "EM-8821",
+      "page": 1
+    },
+    "purchase_date": {
+      "normalized": "2026-09-18",
+      "page": 1
+    },
+    "subtotal": {
+      "normalized": "1200.00",
+      "page": 1,
+      "evidence_contains": "1,200"
+    },
+    "tax": {
+      "normalized": "216.00",
+      "page": 1
+    },
+    "total": {
+      "normalized": "1416.00",
+      "page": 1,
+      "evidence_contains": "1,416"
+    }
+  },
+  "expected_actions": [
+    { "action_type": "PAY" }
+  ]
+}
