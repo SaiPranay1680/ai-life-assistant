@@ -58,15 +58,7 @@ export default function SettingsPage() {
             />
           </label>
         </section>
-        <Button
-          variant="secondary"
-          onClick={() => {
-            logout();
-            router.replace("/login");
-          }}
-        >
-          Sign out
-        </Button>
+    
       </div>
       <Modal
         open={deleteOpen}

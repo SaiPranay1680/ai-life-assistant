@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...db import get_db
+from ..auth.deps import get_current_user, CurrentUser
 from .schemas import UserListItem
 from . import service
 
@@ -14,8 +15,9 @@ async def list_users(
     skip: int = Query(0, ge=0, description="Number of users to skip"),
     limit: int = Query(100, ge=1, le=500, description="Maximum number of users to return"),
     db: AsyncSession = Depends(get_db),
+    _current: CurrentUser = Depends(get_current_user),
 ):
-    """Fetch complete list of users from the database."""
+    """Fetch complete list of users from the database (authenticated users only)."""
     return await service.list_users(db, skip=skip, limit=limit)
 
 
@@ -23,6 +25,7 @@ async def list_users(
 async def get_user(
     user_id: UUID,
     db: AsyncSession = Depends(get_db),
+    _current: CurrentUser = Depends(get_current_user),
 ):
-    """Fetch a specific user by ID."""
+    """Fetch a specific user by ID (authenticated users only)."""
     return await service.get_user_by_id(db, user_id)
